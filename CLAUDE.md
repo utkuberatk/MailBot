@@ -128,6 +128,11 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - `/companies`: arama, şehir/sektör/e-posta filtreleri, çoklu seçim, toplu silme, seçilenlerle `/compose`'a geçiş.
 - Elle ekleme (aynı alan adı varsa 409) + CSV içe aktarma (`,` ve `;` ayırıcı, TR/EN başlıklar, başlıksız dosyalarda sıralı eşleme).
 - Uçlar: `/api/companies` (GET/POST/DELETE), `/api/companies/import`.
+- **Alan adı (`domain`) benzersizdir ve `lib/companies.ts` → `companyDomain()` ile üretilir:** önce site
+  adresinden, site yoksa e-postadan. `gmail.com`, `hotmail.com`, `yandex.com` gibi **ücretsiz mail
+  sağlayıcıları alan adı sayılmaz** (`domain = null`), aksi halde sadece Gmail adresi olan her şirket
+  aynı kayda çakışır ve "Bu alan adı zaten kayıtlı" hatası verir. Alan adı olmayan kayıtlar e-posta
+  adresine göre tekilleştirilir.
 
 ### ✅ Faz 5 — Mail yazma, iyileştirme, gönderim (tamamlandı)
 - `lib/gmail.ts`: OAuth refresh, MIME kurulumu (text+html, RFC 2047 başlık kodlaması), gönderim, thread okuma.

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { normalizeDomain, isJunkEmail } from '@/lib/companies'
+import { companyDomain, isJunkEmail } from '@/lib/companies'
 import type { Prisma } from '@/generated/prisma/client'
 
 /** Sirket listesi — arama ve filtrelerle. */
@@ -63,16 +63,26 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Geçerli bir e-posta adresi girin.' }, { status: 400 })
   }
 
-  const domain = normalizeDomain(body.website || (email ? email.split('@')[1] : '') || '')
+  // Site adresinden; site yoksa e-postadan turetilir.
+  // gmail/hotmail gibi ucretsiz saglayicilar alan adi sayilmaz (bkz. companyDomain).
+  const domain = companyDomain(body.website, email)
 
-  if (domain) {
-    const existing = await db.company.findUnique({ where: { domain } })
-    if (existing) {
-      return Response.json(
-        { error: `Bu alan adı zaten kayıtlı: ${existing.name}` },
-        { status: 409 },
-      )
-    }
+  const existing = domain
+    ? await db.company.findUnique({ where: { domain } })
+    : email
+      ? await db.company.findFirst({ where: { email } })
+      : null
+
+  if (existing) {
+    const hidden = existing.isActive ? '' : ' (pasif kayıt, listede görünmüyor)'
+    return Response.json(
+      {
+        error: domain
+          ? `Bu alan adı zaten kayıtlı: ${existing.name}${hidden}`
+          : `Bu e-posta adresi zaten kayıtlı: ${existing.name}${hidden}`,
+      },
+      { status: 409 },
+    )
   }
 
   const company = await db.company.create({

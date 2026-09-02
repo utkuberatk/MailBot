@@ -1,5 +1,5 @@
 import { parseCsv, csvToCompanies } from '@/lib/csv'
-import { upsertCompanies, normalizeDomain } from '@/lib/companies'
+import { upsertCompanies } from '@/lib/companies'
 
 /**
  * CSV ile toplu sirket ekleme.
@@ -21,12 +21,8 @@ export async function POST(request: Request) {
   const rows = csvToCompanies(parseCsv(csv))
   if (rows.length === 0) return Response.json({ error: 'CSV içinde satır bulunamadı.' }, { status: 400 })
 
-  // Alan adi olmayan satirlar e-postadan turetilir; ikisi de yoksa atlanir.
-  const companies = rows.map((row) => ({
-    ...row,
-    domain: normalizeDomain(row.website || (row.email ? row.email.split('@')[1] : '') || '') ?? undefined,
-  }))
-
-  const result = await upsertCompanies(companies, { source: 'csv' })
+  // Alan adi upsertCompanies icinde site adresinden/e-postadan turetilir;
+  // ikisi de yoksa satir atlanir.
+  const result = await upsertCompanies(rows, { source: 'csv' })
   return Response.json({ ...result, total: rows.length })
 }

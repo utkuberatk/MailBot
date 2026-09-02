@@ -63,6 +63,42 @@ const JUNK_EMAIL_PATTERNS = [
   '.svg',
 ]
 
+/**
+ * Ucretsiz mail saglayicilari. Bu alan adlari bir sirketi temsil etmez:
+ * bir @gmail.com adresinden alan adi turetilirse butun gmail kullanicilari
+ * ayni "gmail.com" kaydina cakisir.
+ */
+const FREE_EMAIL_DOMAINS = [
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'hotmail.com.tr',
+  'outlook.com',
+  'outlook.com.tr',
+  'live.com',
+  'msn.com',
+  'windowslive.com',
+  'yahoo.com',
+  'yahoo.com.tr',
+  'icloud.com',
+  'me.com',
+  'mac.com',
+  'aol.com',
+  'yandex.com',
+  'yandex.com.tr',
+  'yandex.ru',
+  'mail.ru',
+  'protonmail.com',
+  'proton.me',
+  'gmx.com',
+  'gmx.net',
+  'zoho.com',
+  'mynet.com',
+  'superonline.com',
+  'ttmail.com',
+  'turk.net',
+]
+
 /** URL veya alan adindan sadeleştirilmiş alan adı üretir (www yok, küçük harf). */
 export function normalizeDomain(input: string): string | null {
   if (!input) return null
@@ -77,6 +113,26 @@ export function normalizeDomain(input: string): string | null {
 
 export function isBlockedDomain(domain: string): boolean {
   return BLOCKED_DOMAINS.some((blocked) => domain === blocked || domain.endsWith(`.${blocked}`))
+}
+
+/** gmail/hotmail gibi ucretsiz saglayicilar sirket alan adi sayilmaz. */
+export function isFreeEmailDomain(domain: string): boolean {
+  return FREE_EMAIL_DOMAINS.includes(domain)
+}
+
+/**
+ * Bir sirketin benzersiz alan adini hesaplar.
+ * Once site adresi denenir; site yoksa e-postadan turetilir ama
+ * ucretsiz saglayicilar (gmail.com vb.) alan adi olarak kullanilmaz —
+ * aksi halde farkli sirketler ayni kayda cakisir.
+ */
+export function companyDomain(website?: string | null, email?: string | null): string | null {
+  const fromWebsite = normalizeDomain(website ?? '')
+  if (fromWebsite) return fromWebsite
+
+  const emailDomain = normalizeDomain(email?.split('@')[1] ?? '')
+  if (!emailDomain || isFreeEmailDomain(emailDomain)) return null
+  return emailDomain
 }
 
 export function isJunkEmail(email: string): boolean {
@@ -113,27 +169,35 @@ export async function upsertCompanies(
   const source = options.source ?? 'n8n'
 
   for (const item of items) {
-    const domain = normalizeDomain(item.domain || item.website || '')
-    if (!domain || isBlockedDomain(domain)) {
+    const domain = companyDomain(item.domain || item.website, item.email)
+    if (domain && isBlockedDomain(domain)) {
       result.skipped++
       continue
     }
 
     const email = item.email && !isJunkEmail(item.email) ? item.email.toLowerCase() : null
-    const name = (item.name || domain).trim()
+    // Alan adi yoksa (orn. sadece gmail adresi) kayit e-postasiyla ayirt edilir.
+    if (!domain && !email) {
+      result.skipped++
+      continue
+    }
 
-    const existing = await db.company.findUnique({ where: { domain } })
+    const name = (item.name || domain || email || '').trim()
+
+    const existing = domain
+      ? await db.company.findUnique({ where: { domain } })
+      : await db.company.findFirst({ where: { email } })
 
     if (existing) {
       await db.company.update({
-        where: { domain },
+        where: { id: existing.id },
         data: {
           name: existing.name || name,
           email: existing.email || email,
           phone: existing.phone || item.phone || null,
           city: existing.city || item.city || null,
           sector: existing.sector || item.sector || null,
-          website: existing.website || item.website || `https://${domain}`,
+          website: existing.website || item.website || (domain ? `https://${domain}` : null),
           score: item.score ?? existing.score,
           rawSnippet: existing.rawSnippet || item.rawSnippet || null,
         },
@@ -146,7 +210,7 @@ export async function upsertCompanies(
       data: {
         name,
         domain,
-        website: item.website || `https://${domain}`,
+        website: item.website || (domain ? `https://${domain}` : null),
         email,
         phone: item.phone || null,
         city: item.city || null,

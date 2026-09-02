@@ -45,3 +45,4 @@ generated/
 
 # next.js typed routes
 .next/
+prisma/dev.db.bak-*
