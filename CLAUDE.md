@@ -204,9 +204,14 @@ Model `.env`'deki `GROQ_MODEL` ile seçilir.
 |---|---|---|
 | `!mailara` | `!mailara ['İstanbul İçi Butik']` | Discovery tetikler, bitince bulunan şirket sayısı + ilk 10 özet |
 | `!mailcevap` | `!mailcevap 42 "Yarın 15:00 uygun"` | `polishReply` ile düzeltir → Gmail thread'ine yanıt → onay mesajı |
-| `!durum` | `!durum` | Gönderilen / açılan / yanıtlanan / olumlu sayıları |
+| `!durum` | `!durum` | Gönderilen / açılan / yanıtlanan / olumlu sayıları + kalan kota |
+| `!komutlar` | `!komutlar` | Komutların ne işe yaradığını ve nasıl yazılacağını anlatan bilgilendirme sayfası (`!yardim` / `!help` aynı işi yapar) |
 
 Bildirimler yalnızca `sentiment = POSITIVE` yanıtlar için gider.
+
+`!mailcevap`'taki sayı **yanıt ID'sidir** (mesaj ID'si değil); bildirim embed'indeki "Yanıt ID"
+alanında ve `/inbox` sayfasında görünür. Olmayan bir ID yazılırsa bot geçerli ID'leri listeler,
+hiç yanıt yoksa bunu ve nasıl yanıt toplanacağını açıklar.
 
 ---
 

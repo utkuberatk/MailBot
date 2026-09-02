@@ -66,7 +66,9 @@ takip pikseli, çıkış linki ve `/media` erişilebilir.
 4. **Gelen Kutusu** — *Yanıtlar* sekmesi varsayılan olarak sadece OLUMLU yanıtları gösterir; kartın
    içinden kısa bir not yazıp AI'ın düzelttiği yanıtı thread'e gönderebilirsiniz. *Gönderilenler*
    sekmesinde açılanlar yeşil, açılmayanlar kırmızı noktayla işaretlidir.
-5. **Discord** — `!mailara ['İstanbul İçi Butik']`, `!mailcevap 42 "Yarın 15:00 uygun"`, `!durum`.
+5. **Discord** — `!komutlar` yazınca tüm komutların anlatıldığı sayfa gelir:
+   `!mailara ['İstanbul İçi Butik']`, `!mailcevap 42 "Yarın 15:00 uygun"`, `!durum`.
+   `!mailcevap`'taki sayı yanıt ID'sidir; bildirim mesajında ve Gelen Kutusu'nda yazar.
 
 ---
 
