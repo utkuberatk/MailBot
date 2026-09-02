@@ -1,0 +1,664 @@
+{
+  "id": "6FPEyzQPm21nufAL",
+  "name": "LeadBot - 2 - Mail Gonder",
+  "description": null,
+  "active": true,
+  "activeVersionId": "55fde969-1cab-41ce-b12a-ae5c008bcb1a",
+  "createdAt": "2026-08-31T16:39:18.383Z",
+  "updatedAt": "2026-08-31T16:54:33.612Z",
+  "isArchived": false,
+  "versionId": "55fde969-1cab-41ce-b12a-ae5c008bcb1a",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 2) Mail Gonder\n\n**Girilecek credential:**\n- `Gmail: Mail Gonder` node -> **Gmail OAuth2** credential.\n  (SMTP tercih ederseniz bu node'u **Send Email** node'u ile\n  degistirip SMTP credential'i girin; alan adlari aynidir.)\n\n**Panele baglama:**\nWebhook Production URL'ini panelin `.env` dosyasindaki\n`N8N_SEND_MAIL_WEBHOOK` degiskenine yazin.\n\n### Spam onlemleri - GEVSETMEYIN\n- `Alici Dongusu` batch size **1** olmali (toplu gonderim yok).\n- `Bekleme Suresi` 30-90 sn rastgele bekleme uretir.\n- Video mail'e **ek** olarak degil, govdedeki **link** olarak gider.\n- Gunluk limit zaten panelde uygulanir; buraya sadece izin verilen\n  sayida alici gelir.",
+        "height": 560,
+        "width": 500,
+        "color": 3
+      },
+      "id": "b9dab914-7487-4a23-9eab-64a331920d44",
+      "name": "Kurulum Notu",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mail-gonder",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "45b10a56-444b-4aa0-bcba-e436b3c2ebf2",
+      "name": "Panel Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        592,
+        368
+      ],
+      "webhookId": "a1b2c3d4-mail-gonder-0002",
+      "notesInFlow": true,
+      "notes": "Panel \"Gonder\" butonu buraya POST eder."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Panelden gelen listeyi alici basina bir item haline getirir.\n// Ortak alanlar (subject/bodyHtml) her item'a kopyalanir ki dongu\n// icinde ek node referansina gerek kalmasin.\nconst body = items[0].json.body || items[0].json;\nconst alicilar = body.recipients || [];\n\nif (!alicilar.length) throw new Error(\"recipients bos geldi.\");\n\nreturn alicilar.map((r) => ({\n  json: {\n    campaignId: body.campaignId,\n    subject: body.subject,\n    bodyHtml: body.bodyHtml,\n    videoUrl: body.videoUrl || \"\",\n    callbackUrl: body.callbackUrl,\n    panelKey: body.panelKey,\n    leadId: r.leadId,\n    email: r.email,\n    business_name: r.business_name || \"\",\n    website: r.website || \"\",\n    phone: r.phone || \"\",\n    address: r.address || \"\",\n    unsubscribeUrl: r.unsubscribeUrl || \"\",\n  },\n}));"
+      },
+      "id": "ed95738c-42bb-4dfd-8b7a-f2f09e3de5f8",
+      "name": "Alicilari Hazirla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, kuyruga_alinan: $items().length }) }}",
+        "options": {}
+      },
+      "id": "f6bf68a6-4499-4942-bebd-7545d7fdf629",
+      "name": "Panele Hemen Yanit Ver",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        992,
+        368
+      ],
+      "notesInFlow": true,
+      "notes": "Gonderim saatler surebilir; panel beklemesin diye hemen yanit doner."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "f9ba99c0-ad3a-408a-b4b9-22546a02cf97",
+      "name": "Alici Dongusu",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1184,
+        368
+      ],
+      "notesInFlow": true,
+      "notes": "batchSize 1: alicilara TEK TEK gonderilir."
+    },
+    {
+      "parameters": {},
+      "id": "09b3bd8e-09e5-4ab8-8cda-505493a07312",
+      "name": "Gonderim Bitti",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// {{business_name}} gibi yer tutuculari bu aliciya gore doldurur.\n// Video mail'e EK olarak eklenmez; govdedeki LINK olarak kalir.\nconst d = items[0].json;\n\nconst kacir = (s) => String(s == null ? \"\" : s)\n  .replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\")\n  .replace(/>/g, \"&gt;\").replace(/\"/g, \"&quot;\");\n\nconst alanlar = {\n  business_name: d.business_name,\n  website: d.website,\n  email: d.email,\n  phone: d.phone,\n  address: d.address,\n  unsubscribe_url: d.unsubscribeUrl,\n};\n\n// govde HTML oldugu icin kacislanir; konu duz metindir, kacislanmaz.\nconst doldur = (metin, htmlMi) => {\n  let out = String(metin || \"\");\n  for (const [ad, deger] of Object.entries(alanlar)) {\n    const yerine = htmlMi ? kacir(deger) : String(deger == null ? \"\" : deger);\n    out = out.replace(new RegExp(\"{{\\\\s*\" + ad + \"\\\\s*}}\", \"g\"), yerine);\n  }\n  return out;\n};\n\nreturn [{ json: Object.assign({}, d, {\n  subjectFinal: doldur(d.subject, false).replace(/<[^>]*>/g, \"\").trim(),\n  bodyFinal: doldur(d.bodyHtml, true),\n}) }];"
+      },
+      "id": "7bac4cb1-042d-438d-90ac-08ff521b5396",
+      "name": "Maili Kisisellestir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.subjectFinal }}",
+        "message": "={{ $json.bodyFinal }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6bd08864-d54a-432e-9b7e-7de6e0c24733",
+      "name": "Gmail: Mail Gonder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1632,
+        480
+      ],
+      "notesInFlow": true,
+      "webhookId": "a1b2c3d4-gmail-send-0002",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "DkwkILHnyPZM33OG",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "CREDENTIAL: Gmail OAuth2. Video EK DEGIL, govdede link olarak gider."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Maili Kisisellestir').item.json.callbackUrl }}/{{ $('Maili Kisisellestir').item.json.leadId }}/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $('Maili Kisisellestir').item.json.panelKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: \"gonderildi\" }) }}",
+        "options": {}
+      },
+      "id": "8edb6cc3-8bf0-429b-9f4a-717a7964754c",
+      "name": "Panel: Gonderildi Isaretle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        480
+      ],
+      "notesInFlow": true,
+      "notes": "Credential gerekmez; x-panel-key panelden gelir."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Spam filtrelerine takilmamak icin gonderimler arasi rastgele bekleme.\n// SURE DUSURULMEMELI: 30-90 saniye araligi bilincli secilmistir.\nconst saniye = Math.floor(Math.random() * 61) + 30; // 30-90\nreturn [{ json: Object.assign({}, items[0].json, { waitSeconds: saniye }) }];"
+      },
+      "id": "2072d4c5-9fa5-43b8-8235-cb0230178767",
+      "name": "Bekleme Suresi (30-90 sn)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2064,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.waitSeconds }}"
+      },
+      "id": "a7904db3-190d-433d-8c51-88021a07529e",
+      "name": "Bekle",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2288,
+        480
+      ],
+      "webhookId": "a1b2c3d4-mail-wait-0002",
+      "notesInFlow": true,
+      "notes": "Sonraki aliciya gecmeden once bekler."
+    }
+  ],
+  "connections": {
+    "Panel Webhook": {
+      "main": [
+        [
+          {
+            "node": "Alicilari Hazirla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alicilari Hazirla": {
+      "main": [
+        [
+          {
+            "node": "Panele Hemen Yanit Ver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panele Hemen Yanit Ver": {
+      "main": [
+        [
+          {
+            "node": "Alici Dongusu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alici Dongusu": {
+      "main": [
+        [
+          {
+            "node": "Gonderim Bitti",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Maili Kisisellestir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Maili Kisisellestir": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Mail Gonder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: Mail Gonder": {
+      "main": [
+        [
+          {
+            "node": "Panel: Gonderildi Isaretle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panel: Gonderildi Isaretle": {
+      "main": [
+        [
+          {
+            "node": "Bekleme Suresi (30-90 sn)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekleme Suresi (30-90 sn)": {
+      "main": [
+        [
+          {
+            "node": "Bekle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekle": {
+      "main": [
+        [
+          {
+            "node": "Alici Dongusu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "6FPEyzQPm21nufAL",
+      "projectId": "x8wBI9XSNBGZNa9l",
+      "project": {
+        "id": "x8wBI9XSNBGZNa9l",
+        "name": "Utku Berat Kayıkcı <utkuberat.contact@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T16:31:22.613Z",
+        "updatedAt": "2026-08-31T16:32:28.663Z"
+      },
+      "createdAt": "2026-08-31T16:39:18.385Z",
+      "updatedAt": "2026-08-31T16:39:18.385Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "55fde969-1cab-41ce-b12a-ae5c008bcb1a",
+    "workflowId": "6FPEyzQPm21nufAL",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## 2) Mail Gonder\n\n**Girilecek credential:**\n- `Gmail: Mail Gonder` node -> **Gmail OAuth2** credential.\n  (SMTP tercih ederseniz bu node'u **Send Email** node'u ile\n  degistirip SMTP credential'i girin; alan adlari aynidir.)\n\n**Panele baglama:**\nWebhook Production URL'ini panelin `.env` dosyasindaki\n`N8N_SEND_MAIL_WEBHOOK` degiskenine yazin.\n\n### Spam onlemleri - GEVSETMEYIN\n- `Alici Dongusu` batch size **1** olmali (toplu gonderim yok).\n- `Bekleme Suresi` 30-90 sn rastgele bekleme uretir.\n- Video mail'e **ek** olarak degil, govdedeki **link** olarak gider.\n- Gunluk limit zaten panelde uygulanir; buraya sadece izin verilen\n  sayida alici gelir.",
+          "height": 560,
+          "width": 500,
+          "color": 3
+        },
+        "id": "b9dab914-7487-4a23-9eab-64a331920d44",
+        "name": "Kurulum Notu",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "mail-gonder",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "45b10a56-444b-4aa0-bcba-e436b3c2ebf2",
+        "name": "Panel Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          592,
+          368
+        ],
+        "webhookId": "a1b2c3d4-mail-gonder-0002",
+        "notesInFlow": true,
+        "notes": "Panel \"Gonder\" butonu buraya POST eder."
+      },
+      {
+        "parameters": {
+          "jsCode": "// Panelden gelen listeyi alici basina bir item haline getirir.\n// Ortak alanlar (subject/bodyHtml) her item'a kopyalanir ki dongu\n// icinde ek node referansina gerek kalmasin.\nconst body = items[0].json.body || items[0].json;\nconst alicilar = body.recipients || [];\n\nif (!alicilar.length) throw new Error(\"recipients bos geldi.\");\n\nreturn alicilar.map((r) => ({\n  json: {\n    campaignId: body.campaignId,\n    subject: body.subject,\n    bodyHtml: body.bodyHtml,\n    videoUrl: body.videoUrl || \"\",\n    callbackUrl: body.callbackUrl,\n    panelKey: body.panelKey,\n    leadId: r.leadId,\n    email: r.email,\n    business_name: r.business_name || \"\",\n    website: r.website || \"\",\n    phone: r.phone || \"\",\n    address: r.address || \"\",\n    unsubscribeUrl: r.unsubscribeUrl || \"\",\n  },\n}));"
+        },
+        "id": "ed95738c-42bb-4dfd-8b7a-f2f09e3de5f8",
+        "name": "Alicilari Hazirla",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          784,
+          368
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ ok: true, kuyruga_alinan: $items().length }) }}",
+          "options": {}
+        },
+        "id": "f6bf68a6-4499-4942-bebd-7545d7fdf629",
+        "name": "Panele Hemen Yanit Ver",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          992,
+          368
+        ],
+        "notesInFlow": true,
+        "notes": "Gonderim saatler surebilir; panel beklemesin diye hemen yanit doner."
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "id": "f9ba99c0-ad3a-408a-b4b9-22546a02cf97",
+        "name": "Alici Dongusu",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1184,
+          368
+        ],
+        "notesInFlow": true,
+        "notes": "batchSize 1: alicilara TEK TEK gonderilir."
+      },
+      {
+        "parameters": {},
+        "id": "09b3bd8e-09e5-4ab8-8cda-505493a07312",
+        "name": "Gonderim Bitti",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1408,
+          240
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// {{business_name}} gibi yer tutuculari bu aliciya gore doldurur.\n// Video mail'e EK olarak eklenmez; govdedeki LINK olarak kalir.\nconst d = items[0].json;\n\nconst kacir = (s) => String(s == null ? \"\" : s)\n  .replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\")\n  .replace(/>/g, \"&gt;\").replace(/\"/g, \"&quot;\");\n\nconst alanlar = {\n  business_name: d.business_name,\n  website: d.website,\n  email: d.email,\n  phone: d.phone,\n  address: d.address,\n  unsubscribe_url: d.unsubscribeUrl,\n};\n\n// govde HTML oldugu icin kacislanir; konu duz metindir, kacislanmaz.\nconst doldur = (metin, htmlMi) => {\n  let out = String(metin || \"\");\n  for (const [ad, deger] of Object.entries(alanlar)) {\n    const yerine = htmlMi ? kacir(deger) : String(deger == null ? \"\" : deger);\n    out = out.replace(new RegExp(\"{{\\\\s*\" + ad + \"\\\\s*}}\", \"g\"), yerine);\n  }\n  return out;\n};\n\nreturn [{ json: Object.assign({}, d, {\n  subjectFinal: doldur(d.subject, false).replace(/<[^>]*>/g, \"\").trim(),\n  bodyFinal: doldur(d.bodyHtml, true),\n}) }];"
+        },
+        "id": "7bac4cb1-042d-438d-90ac-08ff521b5396",
+        "name": "Maili Kisisellestir",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1408,
+          480
+        ]
+      },
+      {
+        "parameters": {
+          "sendTo": "={{ $json.email }}",
+          "subject": "={{ $json.subjectFinal }}",
+          "message": "={{ $json.bodyFinal }}",
+          "options": {
+            "appendAttribution": false
+          }
+        },
+        "id": "6bd08864-d54a-432e-9b7e-7de6e0c24733",
+        "name": "Gmail: Mail Gonder",
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.1,
+        "position": [
+          1632,
+          480
+        ],
+        "notesInFlow": true,
+        "webhookId": "a1b2c3d4-gmail-send-0002",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "DkwkILHnyPZM33OG",
+            "name": "Gmail account"
+          }
+        },
+        "notes": "CREDENTIAL: Gmail OAuth2. Video EK DEGIL, govdede link olarak gider."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Maili Kisisellestir').item.json.callbackUrl }}/{{ $('Maili Kisisellestir').item.json.leadId }}/status",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-panel-key",
+                "value": "={{ $('Maili Kisisellestir').item.json.panelKey }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ status: \"gonderildi\" }) }}",
+          "options": {}
+        },
+        "id": "8edb6cc3-8bf0-429b-9f4a-717a7964754c",
+        "name": "Panel: Gonderildi Isaretle",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1840,
+          480
+        ],
+        "notesInFlow": true,
+        "notes": "Credential gerekmez; x-panel-key panelden gelir."
+      },
+      {
+        "parameters": {
+          "jsCode": "// Spam filtrelerine takilmamak icin gonderimler arasi rastgele bekleme.\n// SURE DUSURULMEMELI: 30-90 saniye araligi bilincli secilmistir.\nconst saniye = Math.floor(Math.random() * 61) + 30; // 30-90\nreturn [{ json: Object.assign({}, items[0].json, { waitSeconds: saniye }) }];"
+        },
+        "id": "2072d4c5-9fa5-43b8-8235-cb0230178767",
+        "name": "Bekleme Suresi (30-90 sn)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2064,
+          480
+        ]
+      },
+      {
+        "parameters": {
+          "amount": "={{ $json.waitSeconds }}"
+        },
+        "id": "a7904db3-190d-433d-8c51-88021a07529e",
+        "name": "Bekle",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          2288,
+          480
+        ],
+        "webhookId": "a1b2c3d4-mail-wait-0002",
+        "notesInFlow": true,
+        "notes": "Sonraki aliciya gecmeden once bekler."
+      }
+    ],
+    "connections": {
+      "Panel Webhook": {
+        "main": [
+          [
+            {
+              "node": "Alicilari Hazirla",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Alicilari Hazirla": {
+        "main": [
+          [
+            {
+              "node": "Panele Hemen Yanit Ver",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Panele Hemen Yanit Ver": {
+        "main": [
+          [
+            {
+              "node": "Alici Dongusu",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Alici Dongusu": {
+        "main": [
+          [
+            {
+              "node": "Gonderim Bitti",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Maili Kisisellestir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Maili Kisisellestir": {
+        "main": [
+          [
+            {
+              "node": "Gmail: Mail Gonder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Gmail: Mail Gonder": {
+        "main": [
+          [
+            {
+              "node": "Panel: Gonderildi Isaretle",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Panel: Gonderildi Isaretle": {
+        "main": [
+          [
+            {
+              "node": "Bekleme Suresi (30-90 sn)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Bekleme Suresi (30-90 sn)": {
+        "main": [
+          [
+            {
+              "node": "Bekle",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Bekle": {
+        "main": [
+          [
+            {
+              "node": "Alici Dongusu",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Utku Berat Kayıkcı",
+    "name": "Version 55fde969",
+    "description": "",
+    "autosaved": true,
+    "createdAt": "2026-08-31T16:54:33.613Z",
+    "updatedAt": "2026-08-31T17:07:33.000Z",
+    "workflowPublishHistory": [
+      {
+        "id": 2,
+        "workflowId": "6FPEyzQPm21nufAL",
+        "versionId": "55fde969-1cab-41ce-b12a-ae5c008bcb1a",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T17:07:33.763Z"
+      }
+    ]
+  }
+}

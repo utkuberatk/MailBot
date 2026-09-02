@@ -1,8 +1,14 @@
-// n8n "mailbot-discovery" workflow uretici.
+// n8n workflow ureticisi — mailbot-discovery ve mailbot-inbox-sync.
+// Workflow JSON'larini elle duzenlemeyin; bu dosyayi duzenleyip yeniden calistirin.
+require('dotenv/config')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const OUT = path.resolve(__dirname, '..', 'n8n', 'workflows', 'mailbot-discovery.json')
+const OUT_INBOX = path.resolve(__dirname, '..', 'n8n', 'workflows', 'mailbot-inbox-sync.json')
+
+// Zamanlanmis workflow'da webhook govdesi olmadigi icin adres derleme aninda gomulur.
+const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '')
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36'
@@ -373,3 +379,48 @@ const workflow = {
 
 fs.writeFileSync(OUT, JSON.stringify(workflow, null, 2) + '\n', 'utf8')
 console.log(`yazildi: ${OUT} (${nodes.length} node)`)
+
+// --- mailbot-inbox-sync: 3 dakikada bir Gmail yanitlarini cek --------------
+
+const inboxWorkflow = {
+  name: 'mailbot-inbox-sync',
+  active: true,
+  nodes: [
+    {
+      parameters: {
+        rule: { interval: [{ field: 'minutes', minutesInterval: 3 }] },
+      },
+      id: 'b1000000-0000-4000-8000-000000000001',
+      name: 'Her 3 Dakikada',
+      type: 'n8n-nodes-base.scheduleTrigger',
+      typeVersion: 1.2,
+      position: [0, 0],
+    },
+    {
+      parameters: {
+        method: 'POST',
+        url: `${APP_URL}/api/jobs/sync-inbox`,
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '{}',
+        options: { timeout: 120000 },
+      },
+      id: 'b1000000-0000-4000-8000-000000000002',
+      name: 'Yanitlari Senkronize Et',
+      type: 'n8n-nodes-base.httpRequest',
+      typeVersion: 4.2,
+      position: [240, 0],
+      onError: 'continueRegularOutput',
+    },
+  ],
+  connections: {
+    'Her 3 Dakikada': {
+      main: [[{ node: 'Yanitlari Senkronize Et', type: 'main', index: 0 }]],
+    },
+  },
+  settings: { executionOrder: 'v1' },
+  tags: [],
+}
+
+fs.writeFileSync(OUT_INBOX, JSON.stringify(inboxWorkflow, null, 2) + String.fromCharCode(10), 'utf8')
+console.log(`yazildi: ${OUT_INBOX} (${inboxWorkflow.nodes.length} node)`)

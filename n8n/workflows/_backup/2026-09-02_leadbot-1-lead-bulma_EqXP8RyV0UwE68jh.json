@@ -1,0 +1,1242 @@
+{
+  "id": "EqXP8RyV0UwE68jh",
+  "name": "LeadBot - 1 - Lead Bulma",
+  "description": null,
+  "active": true,
+  "activeVersionId": "31659da0-8619-4cd2-ba04-ffa96e36bdf6",
+  "createdAt": "2026-08-31T16:37:46.301Z",
+  "updatedAt": "2026-08-31T19:52:01.000Z",
+  "isArchived": false,
+  "versionId": "31659da0-8619-4cd2-ba04-ffa96e36bdf6",
+  "versionCounter": 11,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1) Lead Bulma\n\n**Credential:** `Apify: Run Baslat`, `Run Durumu` ve `Dataset Al` node'lari\nayni **Header Auth** credential'ini kullanir:\n- Name: `Authorization`\n- Value: `Bearer <APIFY_API_TOKEN>`  (apify.com > Settings > Integrations)\n\n**Neden bu kadar node var?**\n\n1. Webhook **Respond: Immediately** ayarlidir. Panel yalnizca kisa bir ack\n   bekler; tarama dakikalar surdugu icin senkron yanit verilirse panel\n   baglantiyi keser ve \"aborted due to timeout\" hatasi gorunur.\n   Bu yuzden workflow'da **Respond to Webhook node'u YOKTUR** - eklerseniz\n   n8n \"Unused Respond to Webhook node\" hatasi verir.\n\n2. Apify'in `run-sync-get-dataset-items` ucu 300 saniyede kopar. Onun yerine\n   run **async** baslatilir, `Bekle -> Run Durumu -> Bitti mi?` dongusuyle\n   15 saniyede bir yoklanir (en fazla ~10 dakika), sonra dataset cekilir.\n\n3. **E-posta:** Google Maps e-posta dondurmez. Apify'in `scrapeContacts`\n   secenegi ucretli bir add-on oldugu icin KULLANILMIYOR; e-postalar\n   `E-postayi Ayikla` node'unda isletmenin kendi sitesinden\n   (ana sayfa + /iletisim + /contact) ucretsiz ayiklanir.\n\n4. Hata olursa `Panele Hata Bildir` panele raporlar; hata panelde kirmizi\n   satir olarak gorunur - kullanici sessizce bos liste ile kalmaz.\n\n**Panele baglama:** Webhook Production URL'ini `.env` icindeki\n`N8N_FIND_LEADS_WEBHOOK` degiskenine yazin. Workflow **Active** olmali.\nn8n Docker'da ise panelin `PANEL_BASE_URL` degeri\n`http://host.docker.internal:4000` olmali.",
+        "height": 760,
+        "width": 460,
+        "color": 4
+      },
+      "id": "sticky-kurulum",
+      "name": "Kurulum Notu",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-bulma",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wh-lead-bulma",
+      "name": "Panel Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "a1b2c3d4-lead-bulma-0001",
+      "notes": "Respond: Immediately - panel taramayi beklemez.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Panelden gelen webhook govdesini duz alanlara acar.\nconst body = $input.first().json.body || $input.first().json;\n\nif (!body.campaignId) throw new Error(\"campaignId gelmedi. Paneli kontrol edin.\");\nif (!body.query) throw new Error(\"query (arama sorgusu) gelmedi.\");\n\n// statusUrl yeni panelde gelir; eski panelde callbackUrl'den turetiriz ki\n// hata bildirimi her durumda bir yere gidebilsin.\nconst statusUrl = body.statusUrl || String(body.callbackUrl || \"\").replace(\n  /\\/api\\/leads\\/import$/,\n  \"/api/campaigns/\" + body.campaignId + \"/find-leads/status\"\n);\n\nreturn [{\n  json: {\n    campaignId: body.campaignId,\n    topic: body.topic || \"\",\n    query: body.query,\n    location: body.location || \"\",\n    callbackUrl: body.callbackUrl,\n    statusUrl,\n    panelKey: body.panelKey,\n  },\n}];"
+      },
+      "id": "code-girdi",
+      "name": "Girdiyi Hazirla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~google-maps-extractor/runs",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  searchStringsArray: [$json.query],\n  locationQuery: $json.location,\n  maxCrawledPlacesPerSearch: 20,\n  language: \"tr\",\n  skipClosedPlaces: true,\n  website: \"withWebsite\"\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-apify-start",
+      "name": "Apify: Run Baslat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "e6DtKzHVagnNxtK5",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Async baslatir, beklemez. scrapeContacts YOK (ucretli add-on).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "wait-apify",
+      "name": "Bekle",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        840,
+        300
+      ],
+      "webhookId": "a1b2c3d4-lead-bulma-wait"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $('Apify: Run Baslat').first().json.data.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-apify-status",
+      "name": "Run Durumu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "e6DtKzHVagnNxtK5",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bitti-mi-1",
+              "leftValue": "={{ [\"SUCCEEDED\",\"FAILED\",\"ABORTED\",\"TIMED-OUT\",\"TIMING-OUT\"].includes($json.data.status) || $runIndex >= 40 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "if-bitti",
+      "name": "Bitti mi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1240,
+        300
+      ],
+      "notes": "false -> Bekle (yoklama dongusu). $runIndex>=40 ~10 dk sinir.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apify run'i bitti mi, basarili mi? Basarisizsa hata firlatiriz; node'un\n// error output'u \"Panele Hata Bildir\"e bagli oldugu icin panel sebebi gorur.\nconst run = $input.first().json.data || $input.first().json;\nconst durum = run.status;\n\nif (durum !== \"SUCCEEDED\") {\n  const aciklama = {\n    \"FAILED\": \"Apify run'i basarisiz oldu (genelde kredi bitti ya da actor girdisi gecersiz).\",\n    \"ABORTED\": \"Apify run'i iptal edildi.\",\n    \"TIMED-OUT\": \"Apify run'i zaman asimina ugradi.\",\n    \"TIMING-OUT\": \"Apify run'i zaman asimina ugruyor.\",\n    \"RUNNING\": \"Apify run'i 10 dakikada bitmedi; tarama cok genis olabilir.\",\n    \"READY\": \"Apify run'i 10 dakikadir sirada bekliyor, hic baslamadi.\",\n  }[durum] || (\"Apify run durumu: \" + durum);\n  throw new Error(aciklama + \" Apify konsolundan run kaydina bakabilirsiniz.\");\n}\n\nreturn [{ json: { runId: run.id, datasetId: run.defaultDatasetId } }];"
+      },
+      "id": "code-sonuc",
+      "name": "Sonucu Ayikla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        180
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $json.datasetId }}/items?clean=true&format=json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "http-dataset",
+      "name": "Dataset Al",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        180
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "e6DtKzHVagnNxtK5",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "alwaysOutputData": true,
+      "notes": "Bos sonucta da item uretir (alwaysOutputData).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "user-agent",
+              "value": "Mozilla/5.0 (compatible; LeadBot/1.0)"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-site",
+      "name": "Siteyi Getir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        180
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Her isletmenin ana sayfasi. Hata veren site atlanir, akis durmaz.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ new URL(\"/iletisim\", $('Dataset Al').item.json.website).href }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "user-agent",
+              "value": "Mozilla/5.0 (compatible; LeadBot/1.0)"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-iletisim",
+      "name": "Iletisim Sayfasi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2100,
+        180
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "E-postasini yalnizca iletisim sayfasinda verenler icin. Yoksa atlanir.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Google Maps e-posta DONDURMEZ; e-posta ancak isletmenin web sitesinden\n// cikarilabilir. Apify'in bunu yapan \"scrapeContacts\" secenegi UCRETLI bir\n// add-on oldugu icin ayni isi ucretsiz yapiyoruz.\n//\n// ONEMLI: Sayfalari BU node indirmez. n8n 2.x Code node'unu ayri bir task\n// runner sandbox'inda calistirir ve orada this.helpers.httpRequest sessizce\n// basarisiz olur (her siteye null doner). Bu yuzden indirme isi \"Siteyi\n// Getir\" / \"Iletisim Sayfasi\" HTTP node'larina birakildi; burada yalnizca\n// gelen HTML metni ayristiriliyor.\n\nconst isletmeler = $(\"Dataset Al\").all();\nconst anaSayfalar = $(\"Siteyi Getir\").all();\nlet iletisimler = [];\ntry { iletisimler = $(\"Iletisim Sayfasi\").all(); } catch (e) { iletisimler = []; }\n\n// HTTP node basarisiz olduysa item icinde govde yerine error durur.\nconst govdeAl = (item) => {\n  if (!item || !item.json) return \"\";\n  const j = item.json;\n  if (typeof j.data === \"string\") return j.data;\n  if (typeof j.body === \"string\") return j.body;\n  return \"\";\n};\n\n// Rol/servis kutulari ve sahte eslesmeler lead degildir.\nconst ELE = /(^|[._-])(no-?reply|donotreply|postmaster|abuse|mailer-daemon)|example\\.(com|org|net)|sentry\\.io|wixpress\\.com|godaddy|\\.(png|jpe?g|gif|webp|svg|css|js)$/i;\n\n// Hazir sablon temalarindan gelen yer tutucular (\"your@email.com\" gibi).\n// Bunlar gercek isletme adresi degildir; mail atilirsa bounce olur.\nconst YER_TUTUCU = /^(your|youre?mail|yourname|firstname|lastname|adiniz|ornek|test|demo|sample|deneme)@|@(email|e-?mail|domain|yourdomain|yoursite|sitename|mysite|website|test|demo|sample|ornek|sitem|siteniz|alanadi|alanadiniz|firmaniz|domainname|company|sirket).(com|net|org|tr|com\\.tr)$/i;\n\nconst EPOSTA_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,24}/g;\n\nfunction epostaAyikla(html) {\n  const adaylar = [];\n  // mailto: en guvenilir kaynak - once onu dene, sonra duz metni tara.\n  for (const m of html.matchAll(/mailto:([^\"'?>\\s]+)/gi)) adaylar.push(m[1]);\n  for (const m of html.matchAll(EPOSTA_RE)) adaylar.push(m[0]);\n\n  for (const ham of adaylar) {\n    let temiz;\n    try { temiz = decodeURIComponent(ham); } catch (e) { temiz = ham; }\n    temiz = temiz.trim().toLowerCase().replace(/^[.,;:<>()]+|[.,;:<>()]+$/g, \"\");\n    if (temiz.length < 6 || temiz.length > 100) continue;\n    if (!/^[^@\\s]+@[^@\\s]+\\.[a-z]{2,24}$/.test(temiz)) continue;\n    if (ELE.test(temiz) || YER_TUTUCU.test(temiz)) continue;\n    return temiz;\n  }\n  return null;\n}\n\n// HTTP node'lari her girdi item'i icin bir cikti item'i uretir, sira korunur;\n// bu yuzden isletme ile indirilen sayfayi indeksle esliyoruz.\nconst sonuclar = [];\nfor (let i = 0; i < isletmeler.length; i++) {\n  const r = isletmeler[i].json;\n  if (!r || (!r.title && !r.name)) continue;   // bos dataset item'i\n\n  const metin = govdeAl(anaSayfalar[i]) + \"\\n\" + govdeAl(iletisimler[i]);\n  sonuclar.push({ json: Object.assign({}, r, { _eposta: epostaAyikla(metin) }) });\n}\n\n// Arama hic sonuc vermediyse bos dizi DONDURMEYIZ: n8n girdisi bos olan\n// node'lari atlar, boylece \"Panele Bitti Bildir\" hic calismaz ve panel\n// sonsuza kadar \"Arama suruyor\" da takili kalirdi.\nif (!sonuclar.length) return [{ json: { _bos: true } }];\n\nreturn sonuclar;"
+      },
+      "id": "code-eposta",
+      "name": "E-postayi Ayikla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2300,
+        180
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "Ucretli scrapeContacts yerine ucretsiz HTML ayristirma.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Site taramasindan cikan e-postalari panelin bekledigi alanlara cevirir.\nconst girdi = $(\"Girdiyi Hazirla\").first().json;\nconst duzlestir = (v) => (Array.isArray(v) ? v[0] : v) || null;\n\nconst leads = [];\nconst gorulen = new Set();\nconst hepsi = $input.all();\n\nfor (const item of hepsi) {\n  const r = item.json;\n  // _eposta site taramasindan gelir; e-posta zaten Apify ciktisinda varsa\n  // (ucretli scrapeContacts acikken) onu da kabul ederiz.\n  const eposta = r._eposta || duzlestir(r.email || r.emails);\n  if (!eposta) continue;\n\n  const anahtar = String(eposta).toLowerCase();\n  if (gorulen.has(anahtar)) continue;   // zincir subeleri ayni maili verir\n  gorulen.add(anahtar);\n\n  leads.push({\n    business_name: r.title || r.name || null,\n    website: r.website || r.url || null,\n    email: anahtar,\n    phone: r.phone || r.phoneUnformatted || null,\n    address: r.address || r.fullAddress || null,\n  });\n}\n\nreturn [{\n  json: {\n    campaignId: girdi.campaignId,\n    callbackUrl: girdi.callbackUrl,\n    statusUrl: girdi.statusUrl,\n    panelKey: girdi.panelKey,\n    bulunan: leads.length,\n    taranan: hepsi.length,\n    leads,\n  },\n}];"
+      },
+      "id": "code-esle",
+      "name": "Leadleri Esle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $json.panelKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campaignId: $json.campaignId, leads: $json.leads }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-import",
+      "name": "Panele Aktar (leads/import)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2700,
+        180
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "Credential gerekmez; x-panel-key panelden gelen degerle gonderilir.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Leadleri Esle').first().json.statusUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $('Leadleri Esle').first().json.panelKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: \"bitti\", found: $('Leadleri Esle').first().json.bulunan }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-done",
+      "name": "Panele Bitti Bildir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Girdiyi Hazirla').first().json.statusUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $('Girdiyi Hazirla').first().json.panelKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: \"hata\", error: String(($json.error && $json.error.message) || $json.error || \"n8n workflow hatasi\").slice(0, 500) }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-error",
+      "name": "Panele Hata Bildir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        560
+      ],
+      "notes": "Tum hatali node ciktilari buraya baglidir.",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Panel Webhook": {
+      "main": [
+        [
+          {
+            "node": "Girdiyi Hazirla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Girdiyi Hazirla": {
+      "main": [
+        [
+          {
+            "node": "Apify: Run Baslat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify: Run Baslat": {
+      "main": [
+        [
+          {
+            "node": "Bekle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekle": {
+      "main": [
+        [
+          {
+            "node": "Run Durumu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Durumu": {
+      "main": [
+        [
+          {
+            "node": "Bitti mi?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bitti mi?": {
+      "main": [
+        [
+          {
+            "node": "Sonucu Ayikla",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bekle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sonucu Ayikla": {
+      "main": [
+        [
+          {
+            "node": "Dataset Al",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dataset Al": {
+      "main": [
+        [
+          {
+            "node": "Siteyi Getir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Siteyi Getir": {
+      "main": [
+        [
+          {
+            "node": "Iletisim Sayfasi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iletisim Sayfasi": {
+      "main": [
+        [
+          {
+            "node": "E-postayi Ayikla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E-postayi Ayikla": {
+      "main": [
+        [
+          {
+            "node": "Leadleri Esle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leadleri Esle": {
+      "main": [
+        [
+          {
+            "node": "Panele Aktar (leads/import)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panele Aktar (leads/import)": {
+      "main": [
+        [
+          {
+            "node": "Panele Bitti Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Panele Hata Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "EqXP8RyV0UwE68jh",
+      "projectId": "x8wBI9XSNBGZNa9l",
+      "project": {
+        "id": "x8wBI9XSNBGZNa9l",
+        "name": "Utku Berat Kayıkcı <utkuberat.contact@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T16:31:22.613Z",
+        "updatedAt": "2026-08-31T16:32:28.663Z"
+      },
+      "createdAt": "2026-08-31T16:37:46.305Z",
+      "updatedAt": "2026-08-31T16:37:46.305Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "31659da0-8619-4cd2-ba04-ffa96e36bdf6",
+    "workflowId": "EqXP8RyV0UwE68jh",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## 1) Lead Bulma\n\n**Credential:** `Apify: Run Baslat`, `Run Durumu` ve `Dataset Al` node'lari\nayni **Header Auth** credential'ini kullanir:\n- Name: `Authorization`\n- Value: `Bearer <APIFY_API_TOKEN>`  (apify.com > Settings > Integrations)\n\n**Neden bu kadar node var?**\n\n1. Webhook **Respond: Immediately** ayarlidir. Panel yalnizca kisa bir ack\n   bekler; tarama dakikalar surdugu icin senkron yanit verilirse panel\n   baglantiyi keser ve \"aborted due to timeout\" hatasi gorunur.\n   Bu yuzden workflow'da **Respond to Webhook node'u YOKTUR** - eklerseniz\n   n8n \"Unused Respond to Webhook node\" hatasi verir.\n\n2. Apify'in `run-sync-get-dataset-items` ucu 300 saniyede kopar. Onun yerine\n   run **async** baslatilir, `Bekle -> Run Durumu -> Bitti mi?` dongusuyle\n   15 saniyede bir yoklanir (en fazla ~10 dakika), sonra dataset cekilir.\n\n3. **E-posta:** Google Maps e-posta dondurmez. Apify'in `scrapeContacts`\n   secenegi ucretli bir add-on oldugu icin KULLANILMIYOR; e-postalar\n   `E-postayi Ayikla` node'unda isletmenin kendi sitesinden\n   (ana sayfa + /iletisim + /contact) ucretsiz ayiklanir.\n\n4. Hata olursa `Panele Hata Bildir` panele raporlar; hata panelde kirmizi\n   satir olarak gorunur - kullanici sessizce bos liste ile kalmaz.\n\n**Panele baglama:** Webhook Production URL'ini `.env` icindeki\n`N8N_FIND_LEADS_WEBHOOK` degiskenine yazin. Workflow **Active** olmali.\nn8n Docker'da ise panelin `PANEL_BASE_URL` degeri\n`http://host.docker.internal:4000` olmali.",
+          "height": 760,
+          "width": 460,
+          "color": 4
+        },
+        "id": "sticky-kurulum",
+        "name": "Kurulum Notu",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -340,
+          -140
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "lead-bulma",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "wh-lead-bulma",
+        "name": "Panel Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          200,
+          300
+        ],
+        "webhookId": "a1b2c3d4-lead-bulma-0001",
+        "notes": "Respond: Immediately - panel taramayi beklemez.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Panelden gelen webhook govdesini duz alanlara acar.\nconst body = $input.first().json.body || $input.first().json;\n\nif (!body.campaignId) throw new Error(\"campaignId gelmedi. Paneli kontrol edin.\");\nif (!body.query) throw new Error(\"query (arama sorgusu) gelmedi.\");\n\n// statusUrl yeni panelde gelir; eski panelde callbackUrl'den turetiriz ki\n// hata bildirimi her durumda bir yere gidebilsin.\nconst statusUrl = body.statusUrl || String(body.callbackUrl || \"\").replace(\n  /\\/api\\/leads\\/import$/,\n  \"/api/campaigns/\" + body.campaignId + \"/find-leads/status\"\n);\n\nreturn [{\n  json: {\n    campaignId: body.campaignId,\n    topic: body.topic || \"\",\n    query: body.query,\n    location: body.location || \"\",\n    callbackUrl: body.callbackUrl,\n    statusUrl,\n    panelKey: body.panelKey,\n  },\n}];"
+        },
+        "id": "code-girdi",
+        "name": "Girdiyi Hazirla",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.apify.com/v2/acts/compass~google-maps-extractor/runs",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({\n  searchStringsArray: [$json.query],\n  locationQuery: $json.location,\n  maxCrawledPlacesPerSearch: 20,\n  language: \"tr\",\n  skipClosedPlaces: true,\n  website: \"withWebsite\"\n}) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "http-apify-start",
+        "name": "Apify: Run Baslat",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          620,
+          300
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "e6DtKzHVagnNxtK5",
+            "name": "Header Auth account"
+          }
+        },
+        "onError": "continueErrorOutput",
+        "notes": "Async baslatir, beklemez. scrapeContacts YOK (ucretli add-on).",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "amount": 15,
+          "unit": "seconds"
+        },
+        "id": "wait-apify",
+        "name": "Bekle",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          840,
+          300
+        ],
+        "webhookId": "a1b2c3d4-lead-bulma-wait"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/actor-runs/{{ $('Apify: Run Baslat').first().json.data.id }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "http-apify-status",
+        "name": "Run Durumu",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1040,
+          300
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "e6DtKzHVagnNxtK5",
+            "name": "Header Auth account"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "bitti-mi-1",
+                "leftValue": "={{ [\"SUCCEEDED\",\"FAILED\",\"ABORTED\",\"TIMED-OUT\",\"TIMING-OUT\"].includes($json.data.status) || $runIndex >= 40 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "if-bitti",
+        "name": "Bitti mi?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1240,
+          300
+        ],
+        "notes": "false -> Bekle (yoklama dongusu). $runIndex>=40 ~10 dk sinir.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Apify run'i bitti mi, basarili mi? Basarisizsa hata firlatiriz; node'un\n// error output'u \"Panele Hata Bildir\"e bagli oldugu icin panel sebebi gorur.\nconst run = $input.first().json.data || $input.first().json;\nconst durum = run.status;\n\nif (durum !== \"SUCCEEDED\") {\n  const aciklama = {\n    \"FAILED\": \"Apify run'i basarisiz oldu (genelde kredi bitti ya da actor girdisi gecersiz).\",\n    \"ABORTED\": \"Apify run'i iptal edildi.\",\n    \"TIMED-OUT\": \"Apify run'i zaman asimina ugradi.\",\n    \"TIMING-OUT\": \"Apify run'i zaman asimina ugruyor.\",\n    \"RUNNING\": \"Apify run'i 10 dakikada bitmedi; tarama cok genis olabilir.\",\n    \"READY\": \"Apify run'i 10 dakikadir sirada bekliyor, hic baslamadi.\",\n  }[durum] || (\"Apify run durumu: \" + durum);\n  throw new Error(aciklama + \" Apify konsolundan run kaydina bakabilirsiniz.\");\n}\n\nreturn [{ json: { runId: run.id, datasetId: run.defaultDatasetId } }];"
+        },
+        "id": "code-sonuc",
+        "name": "Sonucu Ayikla",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1460,
+          180
+        ],
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/datasets/{{ $json.datasetId }}/items?clean=true&format=json",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "http-dataset",
+        "name": "Dataset Al",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1680,
+          180
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "e6DtKzHVagnNxtK5",
+            "name": "Header Auth account"
+          }
+        },
+        "onError": "continueErrorOutput",
+        "alwaysOutputData": true,
+        "notes": "Bos sonucta da item uretir (alwaysOutputData).",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.website }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "user-agent",
+                "value": "Mozilla/5.0 (compatible; LeadBot/1.0)"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 8000,
+            "redirect": {
+              "redirect": {}
+            },
+            "response": {
+              "response": {
+                "responseFormat": "text"
+              }
+            }
+          }
+        },
+        "id": "http-site",
+        "name": "Siteyi Getir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1900,
+          180
+        ],
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true,
+        "notes": "Her isletmenin ana sayfasi. Hata veren site atlanir, akis durmaz.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ new URL(\"/iletisim\", $('Dataset Al').item.json.website).href }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "user-agent",
+                "value": "Mozilla/5.0 (compatible; LeadBot/1.0)"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 8000,
+            "redirect": {
+              "redirect": {}
+            },
+            "response": {
+              "response": {
+                "responseFormat": "text"
+              }
+            }
+          }
+        },
+        "id": "http-iletisim",
+        "name": "Iletisim Sayfasi",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2100,
+          180
+        ],
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true,
+        "notes": "E-postasini yalnizca iletisim sayfasinda verenler icin. Yoksa atlanir.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Google Maps e-posta DONDURMEZ; e-posta ancak isletmenin web sitesinden\n// cikarilabilir. Apify'in bunu yapan \"scrapeContacts\" secenegi UCRETLI bir\n// add-on oldugu icin ayni isi ucretsiz yapiyoruz.\n//\n// ONEMLI: Sayfalari BU node indirmez. n8n 2.x Code node'unu ayri bir task\n// runner sandbox'inda calistirir ve orada this.helpers.httpRequest sessizce\n// basarisiz olur (her siteye null doner). Bu yuzden indirme isi \"Siteyi\n// Getir\" / \"Iletisim Sayfasi\" HTTP node'larina birakildi; burada yalnizca\n// gelen HTML metni ayristiriliyor.\n\nconst isletmeler = $(\"Dataset Al\").all();\nconst anaSayfalar = $(\"Siteyi Getir\").all();\nlet iletisimler = [];\ntry { iletisimler = $(\"Iletisim Sayfasi\").all(); } catch (e) { iletisimler = []; }\n\n// HTTP node basarisiz olduysa item icinde govde yerine error durur.\nconst govdeAl = (item) => {\n  if (!item || !item.json) return \"\";\n  const j = item.json;\n  if (typeof j.data === \"string\") return j.data;\n  if (typeof j.body === \"string\") return j.body;\n  return \"\";\n};\n\n// Rol/servis kutulari ve sahte eslesmeler lead degildir.\nconst ELE = /(^|[._-])(no-?reply|donotreply|postmaster|abuse|mailer-daemon)|example\\.(com|org|net)|sentry\\.io|wixpress\\.com|godaddy|\\.(png|jpe?g|gif|webp|svg|css|js)$/i;\n\n// Hazir sablon temalarindan gelen yer tutucular (\"your@email.com\" gibi).\n// Bunlar gercek isletme adresi degildir; mail atilirsa bounce olur.\nconst YER_TUTUCU = /^(your|youre?mail|yourname|firstname|lastname|adiniz|ornek|test|demo|sample|deneme)@|@(email|e-?mail|domain|yourdomain|yoursite|sitename|mysite|website|test|demo|sample|ornek|sitem|siteniz|alanadi|alanadiniz|firmaniz|domainname|company|sirket).(com|net|org|tr|com\\.tr)$/i;\n\nconst EPOSTA_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,24}/g;\n\nfunction epostaAyikla(html) {\n  const adaylar = [];\n  // mailto: en guvenilir kaynak - once onu dene, sonra duz metni tara.\n  for (const m of html.matchAll(/mailto:([^\"'?>\\s]+)/gi)) adaylar.push(m[1]);\n  for (const m of html.matchAll(EPOSTA_RE)) adaylar.push(m[0]);\n\n  for (const ham of adaylar) {\n    let temiz;\n    try { temiz = decodeURIComponent(ham); } catch (e) { temiz = ham; }\n    temiz = temiz.trim().toLowerCase().replace(/^[.,;:<>()]+|[.,;:<>()]+$/g, \"\");\n    if (temiz.length < 6 || temiz.length > 100) continue;\n    if (!/^[^@\\s]+@[^@\\s]+\\.[a-z]{2,24}$/.test(temiz)) continue;\n    if (ELE.test(temiz) || YER_TUTUCU.test(temiz)) continue;\n    return temiz;\n  }\n  return null;\n}\n\n// HTTP node'lari her girdi item'i icin bir cikti item'i uretir, sira korunur;\n// bu yuzden isletme ile indirilen sayfayi indeksle esliyoruz.\nconst sonuclar = [];\nfor (let i = 0; i < isletmeler.length; i++) {\n  const r = isletmeler[i].json;\n  if (!r || (!r.title && !r.name)) continue;   // bos dataset item'i\n\n  const metin = govdeAl(anaSayfalar[i]) + \"\\n\" + govdeAl(iletisimler[i]);\n  sonuclar.push({ json: Object.assign({}, r, { _eposta: epostaAyikla(metin) }) });\n}\n\n// Arama hic sonuc vermediyse bos dizi DONDURMEYIZ: n8n girdisi bos olan\n// node'lari atlar, boylece \"Panele Bitti Bildir\" hic calismaz ve panel\n// sonsuza kadar \"Arama suruyor\" da takili kalirdi.\nif (!sonuclar.length) return [{ json: { _bos: true } }];\n\nreturn sonuclar;"
+        },
+        "id": "code-eposta",
+        "name": "E-postayi Ayikla",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2300,
+          180
+        ],
+        "onError": "continueErrorOutput",
+        "notes": "Ucretli scrapeContacts yerine ucretsiz HTML ayristirma.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "jsCode": "// Site taramasindan cikan e-postalari panelin bekledigi alanlara cevirir.\nconst girdi = $(\"Girdiyi Hazirla\").first().json;\nconst duzlestir = (v) => (Array.isArray(v) ? v[0] : v) || null;\n\nconst leads = [];\nconst gorulen = new Set();\nconst hepsi = $input.all();\n\nfor (const item of hepsi) {\n  const r = item.json;\n  // _eposta site taramasindan gelir; e-posta zaten Apify ciktisinda varsa\n  // (ucretli scrapeContacts acikken) onu da kabul ederiz.\n  const eposta = r._eposta || duzlestir(r.email || r.emails);\n  if (!eposta) continue;\n\n  const anahtar = String(eposta).toLowerCase();\n  if (gorulen.has(anahtar)) continue;   // zincir subeleri ayni maili verir\n  gorulen.add(anahtar);\n\n  leads.push({\n    business_name: r.title || r.name || null,\n    website: r.website || r.url || null,\n    email: anahtar,\n    phone: r.phone || r.phoneUnformatted || null,\n    address: r.address || r.fullAddress || null,\n  });\n}\n\nreturn [{\n  json: {\n    campaignId: girdi.campaignId,\n    callbackUrl: girdi.callbackUrl,\n    statusUrl: girdi.statusUrl,\n    panelKey: girdi.panelKey,\n    bulunan: leads.length,\n    taranan: hepsi.length,\n    leads,\n  },\n}];"
+        },
+        "id": "code-esle",
+        "name": "Leadleri Esle",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2500,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.callbackUrl }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-panel-key",
+                "value": "={{ $json.panelKey }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ campaignId: $json.campaignId, leads: $json.leads }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "http-import",
+        "name": "Panele Aktar (leads/import)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2700,
+          180
+        ],
+        "onError": "continueErrorOutput",
+        "notes": "Credential gerekmez; x-panel-key panelden gelen degerle gonderilir.",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Leadleri Esle').first().json.statusUrl }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-panel-key",
+                "value": "={{ $('Leadleri Esle').first().json.panelKey }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ status: \"bitti\", found: $('Leadleri Esle').first().json.bulunan }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "http-done",
+        "name": "Panele Bitti Bildir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2900,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Girdiyi Hazirla').first().json.statusUrl }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-panel-key",
+                "value": "={{ $('Girdiyi Hazirla').first().json.panelKey }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ status: \"hata\", error: String(($json.error && $json.error.message) || $json.error || \"n8n workflow hatasi\").slice(0, 500) }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "http-error",
+        "name": "Panele Hata Bildir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1900,
+          560
+        ],
+        "notes": "Tum hatali node ciktilari buraya baglidir.",
+        "notesInFlow": true
+      }
+    ],
+    "connections": {
+      "Panel Webhook": {
+        "main": [
+          [
+            {
+              "node": "Girdiyi Hazirla",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Girdiyi Hazirla": {
+        "main": [
+          [
+            {
+              "node": "Apify: Run Baslat",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apify: Run Baslat": {
+        "main": [
+          [
+            {
+              "node": "Bekle",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Bekle": {
+        "main": [
+          [
+            {
+              "node": "Run Durumu",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run Durumu": {
+        "main": [
+          [
+            {
+              "node": "Bitti mi?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Bitti mi?": {
+        "main": [
+          [
+            {
+              "node": "Sonucu Ayikla",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Bekle",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sonucu Ayikla": {
+        "main": [
+          [
+            {
+              "node": "Dataset Al",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Dataset Al": {
+        "main": [
+          [
+            {
+              "node": "Siteyi Getir",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Siteyi Getir": {
+        "main": [
+          [
+            {
+              "node": "Iletisim Sayfasi",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Iletisim Sayfasi": {
+        "main": [
+          [
+            {
+              "node": "E-postayi Ayikla",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "E-postayi Ayikla": {
+        "main": [
+          [
+            {
+              "node": "Leadleri Esle",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Leadleri Esle": {
+        "main": [
+          [
+            {
+              "node": "Panele Aktar (leads/import)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Panele Aktar (leads/import)": {
+        "main": [
+          [
+            {
+              "node": "Panele Bitti Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Panele Hata Bildir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "import",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-31T19:51:58.911Z",
+    "updatedAt": "2026-08-31T19:51:58.911Z",
+    "workflowPublishHistory": []
+  }
+}

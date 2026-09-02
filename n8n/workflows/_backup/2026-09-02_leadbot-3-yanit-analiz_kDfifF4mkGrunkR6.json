@@ -1,0 +1,402 @@
+{
+  "id": "kDfifF4mkGrunkR6",
+  "name": "LeadBot - 3 - Yanit Analiz",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-31T20:08:00.850Z",
+  "updatedAt": "2026-08-31T20:08:00.850Z",
+  "isArchived": false,
+  "versionId": "509569e9-c073-4595-b83b-d8c7ad77e605",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "triggerCount": 0,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 3) Yanit Analiz\n\n**Girilecek credential / ayarlar:**\n1. `IMAP: Gelen Kutusu` node -> **IMAP** credential\n   (Gmail icin uygulama sifresi; host `imap.gmail.com`, port `993`).\n2. `Panel Ayarlari` node -> `panelBaseUrl` ve `panelKey` alanlarini\n   panelin `.env` dosyasindaki `PANEL_BASE_URL` ve `PANEL_SHARED_KEY`\n   degerleriyle **elle** doldurun.\n   n8n Docker'da ise: `http://host.docker.internal:4000`\n3. `Groq: Siniflandir` node -> **Header Auth** credential:\n   - Name: `Authorization`\n   - Value: `Bearer <GROQ_API_KEY>`  (console.groq.com, ucretsiz)\n4. `Discord: Bildir` node -> **Discord Webhook** credential\n   (Discord kanal ayarlari > Integrations > Webhooks).\n\nModel: `openai/gpt-oss-20b` (degistirmeyin).\nPanelde bulunmayan bir adresten gelen mail sessizce yoksayilir.",
+        "height": 620,
+        "width": 520,
+        "color": 6
+      },
+      "id": "sticky-Kurulum Notu",
+      "name": "Kurulum Notu",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "format": "simple",
+        "options": {}
+      },
+      "id": "imap-trigger",
+      "name": "IMAP: Gelen Kutusu",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        280,
+        300
+      ],
+      "notes": "CREDENTIAL: IMAP hesabi (gonderim yaptiginiz kutu).",
+      "notesInFlow": true,
+      "credentials": {
+        "imap": {
+          "id": "MrzdnUh6sGNCEbGL",
+          "name": "LeadBot IMAP (DOLDUR: user + password)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-base-url",
+              "name": "panelBaseUrl",
+              "value": "http://localhost:4000",
+              "type": "string"
+            },
+            {
+              "id": "set-panel-key",
+              "name": "panelKey",
+              "value": "BURAYA_PANEL_SHARED_KEY_YAZIN",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-ayarlar",
+      "name": "Panel Ayarlari",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ],
+      "notes": "ELLE DOLDURUN: PANEL_BASE_URL ve PANEL_SHARED_KEY.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// IMAP'ten gelen maili sadelestirir.\nconst d = items[0].json;\n\nconst fromRaw = d.from || (d.headers && d.headers.from) || \"\";\nconst eslesme = String(fromRaw).match(/[^\\s<>@]+@[^\\s<>@]+\\.[^\\s<>@]+/);\nconst gonderen = eslesme ? eslesme[0].toLowerCase() : \"\";\n\nlet metin = d.text || d.textPlain || \"\";\nif (!metin && d.html) metin = String(d.html).replace(/<[^>]*>/g, \" \");\n\n// Alintilanan onceki mail zincirini kes - AI sadece yeni yaniti gorsun.\nmetin = String(metin)\n  .split(/^\\s*(?:>|On .+wrote:|-----Original Message-----)/m)[0]\n  .replace(/\\s+/g, \" \")\n  .trim()\n  .slice(0, 4000);\n\nif (!gonderen) throw new Error(\"Gonderen adresi cozulemedi.\");\n\nreturn [{\n  json: {\n    panelBaseUrl: $(\"Panel Ayarlari\").first().json.panelBaseUrl,\n    panelKey: $(\"Panel Ayarlari\").first().json.panelKey,\n    gonderen,\n    konu: d.subject || \"\",\n    metin,\n  },\n}];"
+      },
+      "id": "code-yanit",
+      "name": "Yaniti Hazirla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.panelBaseUrl }}/api/leads/lookup",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $json.gonderen }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $json.panelKey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-lookup",
+      "name": "Lead'i Bul",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Panelde olmayan adres 404 doner; akis IF ile burada durur.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-found",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "if-found",
+      "name": "Lead Bulundu mu?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "noop-yoksay",
+      "name": "Bilinmeyen Gonderen (yoksay)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1380,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"openai/gpt-oss-20b\",\n  temperature: 0,\n  response_format: { type: \"json_object\" },\n  messages: [\n    {\n      role: \"system\",\n      content: \"Sen bir satis asistanisin. Sana bir isletmeden gelen e-posta yaniti verilecek. Yaniti su uc kategoriden birine ata: olumlu (ilgileniyor, gorusmek/bilgi almak istiyor, fiyat soruyor), beklemede (simdi degil, sonra donerim, karar asamasinda, belirsiz, otomatik yanit), olumsuz (ilgilenmiyor, listeden cikmak istiyor, reddediyor). SADECE su JSON semasiyla yanit ver: {\\\"durum\\\": \\\"olumlu|beklemede|olumsuz\\\", \\\"gerekce\\\": \\\"tek cumlelik kisa gerekce\\\"}\"\n    },\n    {\n      role: \"user\",\n      content: \"Konu: \" + $json.konu + \"\\n\\nYanit:\\n\" + $json.metin\n    }\n  ]\n}) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "http-groq",
+      "name": "Groq: Siniflandir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        180
+      ],
+      "notes": "CREDENTIAL: Header Auth -> Authorization: Bearer <GROQ_API_KEY>. Model: openai/gpt-oss-20b",
+      "notesInFlow": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hF1zCvop9VcBM1RL",
+          "name": "Groq Header Auth (DOLDUR: value)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Groq JSON ciktisini dogrular; beklenmedik bir sey gelirse \"beklemede\"ye duser.\nconst izinli = [\"olumlu\", \"beklemede\", \"olumsuz\"];\nconst yanit = items[0].json;\n\nlet ham = \"\";\ntry {\n  ham = yanit.choices[0].message.content;\n} catch (e) {\n  throw new Error(\"Groq yaniti okunamadi: \" + JSON.stringify(yanit).slice(0, 300));\n}\n\nlet sonuc = {};\ntry {\n  sonuc = JSON.parse(ham);\n} catch (e) {\n  const m = String(ham).match(/\\{[\\s\\S]*\\}/);\n  sonuc = m ? JSON.parse(m[0]) : {};\n}\n\nconst durum = izinli.includes(sonuc.durum) ? sonuc.durum : \"beklemede\";\nconst gerekce = String(sonuc.gerekce || \"AI gerekce dondurmedi\").slice(0, 300);\n\nconst mail = $(\"Yaniti Hazirla\").first().json;\nconst lead = $(\"Lead'i Bul\").first().json.lead;\n\nreturn [{\n  json: {\n    panelBaseUrl: mail.panelBaseUrl,\n    panelKey: mail.panelKey,\n    leadId: lead.id,\n    business_name: lead.business_name || lead.email,\n    email: lead.email,\n    durum,\n    gerekce,\n    metin: mail.metin,\n  },\n}];"
+      },
+      "id": "code-sonuc",
+      "name": "Sonucu Ayikla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.panelBaseUrl }}/api/leads/{{ $json.leadId }}/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-panel-key",
+              "value": "={{ $json.panelKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $json.durum, replyText: $json.gerekce + \" | \" + $json.metin }) }}",
+        "options": {}
+      },
+      "id": "http-status",
+      "name": "Panel: Durumu Guncelle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        180
+      ],
+      "notes": "Credential gerekmez; x-panel-key Panel Ayarlari node'undan gelir.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "={{ ({olumlu: \"\\uD83D\\uDFE2\", beklemede: \"\\uD83D\\uDFE1\", olumsuz: \"\\uD83D\\uDD34\"})[$json.durum] }} **{{ $json.durum.toUpperCase() }}** - {{ $json.business_name }} ({{ $json.email }})\\n> {{ $json.gerekce }}\\n\\n*Yanit:* {{ $json.metin.slice(0, 300) }}",
+        "options": {}
+      },
+      "id": "discord-bildir",
+      "name": "Discord: Bildir",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        180
+      ],
+      "notes": "CREDENTIAL: Discord Webhook URL.",
+      "notesInFlow": true,
+      "webhookId": "a1b2c3d4-discord-0003",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "dhDZqkYXUPh2T1rK",
+          "name": "Discord Webhook (DOLDUR: webhookUri)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "IMAP: Gelen Kutusu": {
+      "main": [
+        [
+          {
+            "node": "Panel Ayarlari",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panel Ayarlari": {
+      "main": [
+        [
+          {
+            "node": "Yaniti Hazirla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yaniti Hazirla": {
+      "main": [
+        [
+          {
+            "node": "Lead'i Bul",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead'i Bul": {
+      "main": [
+        [
+          {
+            "node": "Lead Bulundu mu?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Bulundu mu?": {
+      "main": [
+        [
+          {
+            "node": "Groq: Siniflandir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bilinmeyen Gonderen (yoksay)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq: Siniflandir": {
+      "main": [
+        [
+          {
+            "node": "Sonucu Ayikla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sonucu Ayikla": {
+      "main": [
+        [
+          {
+            "node": "Panel: Durumu Guncelle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Panel: Durumu Guncelle": {
+      "main": [
+        [
+          {
+            "node": "Discord: Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "kDfifF4mkGrunkR6",
+      "projectId": "x8wBI9XSNBGZNa9l",
+      "project": {
+        "id": "x8wBI9XSNBGZNa9l",
+        "name": "Utku Berat Kayıkcı <utkuberat.contact@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T16:31:22.613Z",
+        "updatedAt": "2026-08-31T16:32:28.663Z"
+      },
+      "createdAt": "2026-08-31T20:08:00.852Z",
+      "updatedAt": "2026-08-31T20:08:00.852Z"
+    }
+  ],
+  "activeVersion": null
+}

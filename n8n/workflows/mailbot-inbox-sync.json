@@ -1,0 +1,64 @@
+{
+  "name": "mailbot-inbox-sync",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Her 3 Dakikada",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/jobs/sync-inbox",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Yanitlari Senkronize Et",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Her 3 Dakikada": {
+      "main": [
+        [
+          {
+            "node": "Yanitlari Senkronize Et",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -41,15 +41,33 @@ export function missingKeys(keys: string[]): string[] {
 
 export const env = {
   appUrl: () => optionalEnv('APP_URL', 'http://localhost:3000'),
+
+  /**
+   * Maillerin icinden cagrilan adres (takip pikseli, video onizleme, cikis linki).
+   * Alicinin mail istemcisi localhost'a ulasamaz; disariya acik bir tunel adresi
+   * (ornegin cloudflared) PUBLIC_URL olarak verilmelidir. Yoksa APP_URL kullanilir
+   * ve acilma takibi calismaz.
+   */
+  publicUrl: () => optionalEnv('PUBLIC_URL', optionalEnv('APP_URL', 'http://localhost:3000')),
+  hasPublicUrl: () => optionalEnv('PUBLIC_URL') !== '',
   internalApiKey: () => requireEnv('APP_INTERNAL_API_KEY'),
 
   groqApiKey: () => requireEnv('GROQ_API_KEY'),
-  groqModel: () => optionalEnv('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+  groqModel: () => optionalEnv('GROQ_MODEL', 'openai/gpt-oss-120b'),
 
   gmailClientId: () => requireEnv('GMAIL_CLIENT_ID'),
   gmailClientSecret: () => requireEnv('GMAIL_CLIENT_SECRET'),
   gmailRefreshToken: () => requireEnv('GMAIL_REFRESH_TOKEN'),
   gmailUser: () => requireEnv('GMAIL_USER'),
+
+  /** Mail imzasinda ve List-Unsubscribe basliginda kullanilir. */
+  sender: () => ({
+    name: optionalEnv('SENDER_NAME'),
+    title: optionalEnv('SENDER_TITLE'),
+    address: optionalEnv('SENDER_ADDRESS', optionalEnv('GMAIL_USER')),
+  }),
+
+  videoBaseUrl: () => optionalEnv('VIDEO_BASE_URL', optionalEnv('APP_URL', 'http://localhost:3000') + '/media'),
 
   n8nBaseUrl: () => optionalEnv('N8N_BASE_URL', 'http://localhost:5678'),
   n8nApiKey: () => requireEnv('N8N_API_KEY'),
