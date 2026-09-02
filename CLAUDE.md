@@ -125,12 +125,14 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - ⏳ Kalan: `N8N_API_KEY` + `GROQ_API_KEY` geldiğinde `node scripts/n8n-sync.js push` → `/discover` üzerinden uçtan uca dene.
 - **Bitti:** UI'dan prompt girilince şirketler iletişim bilgileriyle tabloya düşüyor.
 
-### Faz 4 — Şirket yönetimi
-- `/companies`: liste, arama/filtre (şehir, sektör, kaynak), çoklu seçim, silme.
-- Manuel şirket ekleme formu + CSV içe aktarma.
-- **Bitti:** Manuel eklenen kayıt listede görünüyor ve mail için seçilebiliyor.
+### ✅ Faz 4 — Şirket yönetimi (tamamlandı)
+- `/companies`: arama, şehir/sektör/e-posta filtreleri, çoklu seçim, toplu silme, seçilenlerle `/compose`'a geçiş.
+- Elle ekleme (aynı alan adı varsa 409) + CSV içe aktarma (`,` ve `;` ayırıcı, TR/EN başlıklar, başlıksız dosyalarda sıralı eşleme).
+- Uçlar: `/api/companies` (GET/POST/DELETE), `/api/companies/import`.
 
-### Faz 5 — Mail yazma, iyileştirme, gönderim
+### 🔶 Faz 5 — Mail yazma, iyileştirme, gönderim (başlandı)
+- ✅ `scripts/gmail-auth.js` yazıldı: loopback OAuth akışı, refresh token ve hesap adresini `.env`'ye kendi yazar.
+- ⏳ Kalan: `lib/gmail.ts` (MIME + gönderim), `lib/mailer.ts` (kuyruk + hız limiti), `/api/ai/improve`, `/api/messages/send`, `/api/track/[trackingId]`, `/compose` sayfası, ffmpeg ile video thumbnail.
 - `node scripts/gmail-auth.js` → tarayıcıda onay → refresh token `.env`'ye yazılır.
 - `/compose`: taslak yaz → **"AI ile iyileştir"** (Groq; kullanıcının niyetini ve tonunu korur, sadece dili/akışı düzeltir) → video linki gir → ffmpeg ile play butonlu thumbnail üret → seçili şirketlere kuyruklu gönderim.
 - Tracking pixel: `/api/track/[trackingId]` → 1x1 PNG döner, `openedAt` yazar.
