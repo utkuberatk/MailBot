@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+/* MailBot tasarim dili: modern ama sade.
+   Notr gri zemin, tek vurgu rengi (indigo), yumusak kenarlar. */
+
+@theme {
+  --color-surface: #ffffff;
+  --color-canvas: #f7f7f8;
+  --color-line: #e6e6e9;
+  --color-ink: #18181b;
+  --color-muted: #71717a;
+  --color-brand: #4f46e5;
+  --color-brand-soft: #eef2ff;
+  --color-ok: #16a34a;
+  --color-ok-soft: #dcfce7;
+  --color-warn: #dc2626;
+  --color-warn-soft: #fee2e2;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: #18181b;
+    --color-canvas: #0c0c0e;
+    --color-line: #27272a;
+    --color-ink: #fafafa;
+    --color-muted: #a1a1aa;
+    --color-brand: #818cf8;
+    --color-brand-soft: #1e1b4b;
+    --color-ok: #4ade80;
+    --color-ok-soft: #14321f;
+    --color-warn: #f87171;
+    --color-warn-soft: #3b1616;
+  }
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tekrar eden yuzey kaliplari */
+@utility card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 0.875rem;
+}

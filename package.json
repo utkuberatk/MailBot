@@ -1,0 +1,41 @@
+{
+  "name": "mailbot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "E-ticaret sirketlerini bulan, AI destekli soguk mail gonderen ve yanitlari analiz eden local mail otomasyon sistemi",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "bot": "node bot/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "gmail:auth": "node scripts/gmail-auth.js",
+    "n8n:sync": "node scripts/n8n-sync.js"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "dotenv": "^17.4.2",
+    "next": "^16.3.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "postcss": "^8.5.26",
+    "prisma": "^7.10.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "@prisma/client@7.10.0": true,
+    "@prisma/engines@7.10.0": true,
+    "better-sqlite3@12.11.1": true
+  }
+}

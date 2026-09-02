@@ -51,8 +51,8 @@ Gmail OAuth token'ı yalnızca Next.js tarafında durur; n8n ve bot mail gönder
 
 | Alan | Karar | Neden |
 |---|---|---|
-| Uygulama | Next.js 15 (App Router) + TypeScript + Tailwind | Tek proje, tek port, UI + API birlikte |
-| Veritabanı | SQLite + Prisma | Kurulum gerektirmez, dosya bazlı, local |
+| Uygulama | Next.js 16 (App Router) + TypeScript + Tailwind 4 | Tek proje, tek port, UI + API birlikte |
+| Veritabanı | SQLite + Prisma 7 (`better-sqlite3` driver adapter) | Kurulum gerektirmez, dosya bazlı, local |
 | Arama | SearXNG (local Docker) | Ücretsiz, kotasız, API key yok |
 | AI | Groq API | Ücretsiz katman, çok hızlı |
 | Mail | Gmail API (OAuth2, Desktop app) | Thread/message ID takibi, güvenilir yanıt eşleştirme |
@@ -102,23 +102,20 @@ Mailbot/
 
 Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 
-### Faz 0 — Skill kurulumu
-- `https://www.skills.sh/` üzerinde şu konularda skill ara: `nextjs`, `prisma`, `frontend-design`, `code-review`, `diagnosing-bugs`, `web scraping`, `email`.
-- Uygunları kur: `npx skills add <owner/repo> --skill <name>`
-- **Bitti:** Kurulan skill listesi bu dosyanın en altındaki "Kurulu skill'ler" bölümüne yazıldı.
+### ✅ Faz 0 — Skill kurulumu (tamamlandı)
+- skills.sh üzerinden kurulanlar bölüm 13'te listeli.
 
-### Faz 1 — Temel iskelet
-- Next.js 15 + TypeScript + Tailwind kurulumu (`app/`).
-- `npx prisma migrate dev --name init` ile SQLite veritabanı.
-- `lib/db.ts` (Prisma singleton), `lib/env.ts` (env doğrulama).
-- Boş dashboard + sol menü (Keşfet / Şirketler / Mail Yaz / Gelen Kutusu / Ayarlar).
-- **Bitti:** `npm run dev` → localhost:3000 açılıyor, migration uygulanmış.
+### ✅ Faz 1 — Temel iskelet (tamamlandı)
+- Next.js 16 + TypeScript + Tailwind 4, Prisma 7 + SQLite (`init` migration uygulandı).
+- `lib/db.ts` (Prisma singleton + better-sqlite3 adapter), `lib/env.ts` (env erişimi).
+- Sol menü + Panel + `/settings` (eksik anahtarları gösterir) + faz sayfaları için yer tutucular.
+- **Bitti:** `npm run dev` → localhost:3000 çalışıyor, `npx next build` temiz geçiyor.
 
-### Faz 2 — Altyapı servisleri
-- `docker compose -f infra/docker-compose.yml up -d` ile SearXNG ayağa kalkar.
-- `curl "http://localhost:8080/search?q=test&format=json"` JSON dönmeli.
-- n8n Public API ile mevcut workflow'lar listelenir → `n8n/workflows/_backup/` altına kaydedilir → **kullanıcı onayı alınır** → silinir.
-- **Bitti:** SearXNG JSON cevap veriyor, n8n workflow listesi boş, yedekler repoda.
+### 🔶 Faz 2 — Altyapı servisleri (SearXNG bitti, n8n temizliği anahtar bekliyor)
+- ✅ SearXNG çalışıyor: `docker compose -f infra/docker-compose.yml up -d`, `format=json` doğrulandı.
+- ✅ `scripts/n8n-sync.js` yazıldı: `list` / `backup` / `purge --yes` / `push` / `reset --yes`.
+- ⏳ Kullanıcı `.env`'ye `N8N_API_KEY` ekleyince çalıştır: `node scripts/n8n-sync.js backup` → listeyi kullanıcıya göster → onay al → `node scripts/n8n-sync.js purge --yes`.
+- **Bitti:** Eski workflow'lar yedeklendi ve silindi.
 
 ### Faz 3 — Discovery hattı
 - n8n workflow **`mailbot-discovery`**:
@@ -263,4 +260,23 @@ docker compose -f infra/docker-compose.yml up -d   # SearXNG
 
 ## 13. Kurulu skill'ler
 
-_Faz 0'da doldurulacak._
+`.claude/skills/` altında (skills.sh üzerinden kuruldu):
+
+| Skill | Kaynak | Ne için |
+|---|---|---|
+| `prisma-cli` | `prisma/skills` | Prisma 7 CLI komutları, migration akışı |
+| `prisma-client-api` | `prisma/skills` | Prisma Client sorgu API'si, driver adapter kurulumu |
+| `prisma-composer` | `prisma skills sync` | Kurulu Prisma sürümüyle otomatik senkron |
+| `vercel-react-best-practices` | `vercel-labs/agent-skills` | React/Next.js performans kuralları |
+
+Yeni skill kurmak için: `npx skills add <owner/repo> --skill <name> --agent claude-code`
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

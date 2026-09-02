@@ -2,12 +2,13 @@
 // Migration Faz 1'de calistirilir: npx prisma migrate dev --name init
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
+// Baglanti URL'i prisma.config.ts icinde tanimli (Prisma 7 kurali).
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 /// Bulunan veya elle eklenen sirket.

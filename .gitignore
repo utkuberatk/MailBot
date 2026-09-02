@@ -39,3 +39,9 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# prisma generated client
+generated/
+
+# next.js typed routes
+.next/
