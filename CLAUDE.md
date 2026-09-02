@@ -117,11 +117,12 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - ⏳ Kullanıcı `.env`'ye `N8N_API_KEY` ekleyince çalıştır: `node scripts/n8n-sync.js backup` → listeyi kullanıcıya göster → onay al → `node scripts/n8n-sync.js purge --yes`.
 - **Bitti:** Eski workflow'lar yedeklendi ve silindi.
 
-### Faz 3 — Discovery hattı
-- n8n workflow **`mailbot-discovery`**:
-  `Webhook` → Groq ile prompt'tan 3-5 arama sorgusu üret → SearXNG sorguları → domain bazlı dedupe → her site için `/`, `/iletisim`, `/contact`, `/hakkimizda` çek → email/telefon regex çıkarımı → Groq ile "e-ticaret mi?" sınıflandırma → `POST /api/n8n/companies`.
-- Email filtresi: `noreply@`, `no-reply@`, `example@`, `sentry`, `wixpress` içerenler elenir.
-- UI `/discover`: prompt kutusu, çalıştır butonu, canlı durum, sonuç tablosu.
+### 🔶 Faz 3 — Discovery hattı (kod hazır, anahtar bekliyor)
+- ✅ `n8n/workflows/mailbot-discovery.json` (12 node) yazıldı. Üreteci: `node scripts/build-workflows.js` — workflow'u elle düzenlemeyin, üreteci düzenleyip yeniden çalıştırın.
+- ✅ Akış: `Webhook` → app'ten arama sorguları → SearXNG → domain dedupe + pazaryeri/sosyal medya elemesi → ana sayfa + `/iletisim` çek → e-posta/telefon regex çıkarımı → app'ten sınıflandırma → `POST /api/n8n/companies` → `POST /api/n8n/runs/finish`.
+- ✅ App uçları: `/api/discover`, `/api/discover/runs`, `/api/ai/queries`, `/api/ai/classify`, `/api/n8n/companies`, `/api/n8n/runs/finish`. `/discover` sayfası prompt + canlı durum + sonuç tablosu.
+- **Servis adresleri n8n'e webhook gövdesiyle geçilir** (`appUrl`, `searxngUrl`) — n8n tarafında kimlik bilgisi/ayar tutmaya gerek yok. n8n Docker içindeyse `.env`'de bu adresleri `host.docker.internal` ile yazın.
+- ⏳ Kalan: `N8N_API_KEY` + `GROQ_API_KEY` geldiğinde `node scripts/n8n-sync.js push` → `/discover` üzerinden uçtan uca dene.
 - **Bitti:** UI'dan prompt girilince şirketler iletişim bilgileriyle tabloya düşüyor.
 
 ### Faz 4 — Şirket yönetimi
