@@ -193,7 +193,8 @@ const nodes = [
     parameters: {
       httpMethod: 'POST',
       path: 'mailbot-discovery',
-      responseMode: 'lastNode',
+      // Kesif dakikalar surebilir; app beklemeden yanit alip durumu yoklar.
+        responseMode: 'onReceived',
       options: {},
     },
     id: 'a1000000-0000-4000-8000-000000000001',
