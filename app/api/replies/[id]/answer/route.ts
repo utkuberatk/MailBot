@@ -47,9 +47,18 @@ export async function POST(
     ? reply.message.subject
     : `Re: ${reply.message.subject}`
 
-  try {
-    const inReplyTo = reply.gmailMessageId ? await getMessageIdHeader(reply.gmailMessageId) : null
+  // In-Reply-To okunamazsa gonderimi engelleme; thread'e ekleme zaten threadId
+  // ile calisiyor, baslik sadece istemci tarafinda daha duzgun gruplama saglar.
+  let inReplyTo: string | null = null
+  if (reply.gmailMessageId) {
+    try {
+      inReplyTo = await getMessageIdHeader(reply.gmailMessageId)
+    } catch (error) {
+      console.error('[answer] Message-ID okunamadi:', error)
+    }
+  }
 
+  try {
     const sent = await sendMail({
       to: reply.fromEmail,
       subject,

@@ -45,15 +45,17 @@ const seen = new Set();
 const out = [];
 const limit = meta.limit || 25;
 
+// n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.
+function hostOf(value) {
+  const match = String(value || '').match(/^https?:\\/\\/([^/?#]+)/i);
+  if (!match) return '';
+  return match[1].toLowerCase().replace(/^www\\./, '').replace(/:\\d+$/, '');
+}
+
 for (const item of $input.all()) {
   for (const result of item.json.results || []) {
-    let host;
-    try {
-      host = new URL(result.url).hostname.toLowerCase().replace(/^www\\./, '');
-    } catch {
-      continue;
-    }
-    if (!host || seen.has(host)) continue;
+    const host = hostOf(result.url);
+    if (!host || !host.includes('.') || seen.has(host)) continue;
     if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;
 
     seen.add(host);
@@ -81,7 +83,37 @@ const homepages = $('Ana Sayfayi Getir').all();
 const contactPages = $input.all();
 
 const junk = ['noreply','no-reply','donotreply','example.com','example.org','sentry.io','wixpress',
-  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite'];
+  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite',
+  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.
+  'eticaretsitesi.com','ideasoft.com.tr','ticimax.com','ikas.com','shopify.com','wix.com',
+  'platinmarket.com','projesoft.com.tr','tsoft.com.tr','sentry-next'];
+
+// &amp; ve \\u003e gibi kacis dizilerini coz — regex bunlari e-postaya yapistirabiliyor.
+function decodeEntities(value) {
+  return String(value)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\\\\u00([0-9a-f]{2})/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+/** Sayfa basligindan kullanilabilir bir sirket adi cikarir. */
+function cleanTitle(value) {
+  const title = decodeEntities(value)
+    // Uzun tireleri sadelestir, sonra ayiricilara gore ilk parcayi al.
+    .replace(/[\\u2013\\u2014]/g, '-')
+    .replace(/\\s+/g, ' ')
+    .trim();
+
+  // "Marka | Slogan" veya "Marka - Slogan" kaliplarinda ilk anlamli parcayi al.
+  const parts = title.split(/\\s*\\|\\s*|\\s+-\\s+/).map((p) => p.trim()).filter(Boolean);
+  const name = parts.length > 1 && parts[0].length >= 3 ? parts[0] : title;
+
+  return name.replace(/^[\\s|-]+|[\\s|-]+$/g, '').slice(0, 80);
+}
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;
 const PHONE_RE = /(?:\\+90|0)[\\s(]*\\d{3}[\\s)]*\\d{3}[\\s.-]*\\d{2}[\\s.-]*\\d{2}/g;
@@ -112,7 +144,7 @@ for (let i = 0; i < candidates.length; i++) {
   const text = toText(html);
 
   // E-posta: once alan adiyla eslesenler.
-  const emails = [...new Set((html.match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]
+  const emails = [...new Set((decodeEntities(html).match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]
     .filter((e) => !junk.some((j) => e.includes(j)))
     .sort((a, b) => {
       const aOwn = a.endsWith('@' + base.domain) ? 0 : 1;
@@ -130,7 +162,7 @@ for (let i = 0; i < candidates.length; i++) {
       website: base.url,
       runId: base.runId,
       appUrl: base.appUrl,
-      title: (titleMatch ? titleMatch[1] : base.title).trim().slice(0, 200),
+      title: cleanTitle(titleMatch ? titleMatch[1] : base.title) || base.domain,
       email: emails[0] || null,
       allEmails: emails.slice(0, 5),
       phone: phones[0] || null,

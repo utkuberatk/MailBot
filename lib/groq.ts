@@ -71,12 +71,22 @@ export async function buildSearchQueries(prompt: string): Promise<string[]> {
     {
       role: 'system',
       content:
-        'Turkiye pazarinda e-ticaret yapan sirketleri bulmak icin arama motoru sorgulari uretirsin. ' +
-        'Sadece JSON dondur: {"queries": ["...", "..."]}. ' +
-        '3-5 adet, Turkce, birbirinden farkli ve spesifik sorgu uret. ' +
-        'Sorgular firmalarin kendi web sitelerini bulmaya yonelik olsun; pazaryeri urun sayfalarina degil.',
+        'Kullanicinin tarif ettigi isletmeleri bulmak icin arama motoru sorgulari uretirsin. ' +
+        'Sadece JSON dondur: {"queries": ["...", "..."]}.\n' +
+        'Kurallar:\n' +
+        '- Kullanicinin yazdigi sektor, urun ve sehir bilgisini HER sorguda koru. ' +
+        'Promptu genellestirme, baska bir sektore kaydirma.\n' +
+        '- 3-5 adet, Turkce, birbirinden farkli sorgu uret.\n' +
+        '- Sorgular isletmelerin kendi web sitelerini bulmaya yonelik olsun; ' +
+        'pazaryeri urun sayfalarina, haber veya blog yazilarina degil.\n' +
+        '- "e-ticaret", "online magaza" gibi genel kaliplari sorguya kendiliginden ekleme; ' +
+        'sadece kullanici yazdiysa kullan.\n' +
+        '- Devlet kurumu, dernek, yazilim/altyapi saglayicisi getirecek kaliplardan kacin.\n' +
+        'Ornek — prompt "Istanbul ici butik": ' +
+        '["Istanbul butik magaza resmi web sitesi", "Istanbul kadin giyim butigi iletisim", ' +
+        '"Nisantasi butik magaza online satis"]',
     },
-    { role: 'user', content: prompt },
+    { role: 'user', content: `Prompt: ${prompt}` },
   ])
 
   const parsed = parseJson<{ queries?: unknown }>(raw)
@@ -215,8 +225,13 @@ export async function polishReply(input: {
       content:
         'Turkce is yazismasi editorusun. Sadece JSON dondur: {"body": "..."}.\n' +
         'Kullanicinin kisa notunu, karsi tarafin mailine verilen dogal bir yanita cevir.\n' +
-        'Kurallar: niyeti KORU, yeni bilgi/taahhut EKLEME, kisa tut, samimi ve profesyonel ol, ' +
-        'yapay zeka tarafindan yazildigi belli olmasin, imza satirini sen ekleme.',
+        'Kurallar:\n' +
+        '- KIM NE YAPACAK bilgisini asla degistirme. Kullanici bir isi kendisi yapacagini ' +
+        'yaziyorsa ("linki ben yollarim"), bunu karsi tarafa devretme. Eylemlerin oznesini ' +
+        've yonunu aynen koru.\n' +
+        '- Yeni bilgi, tarih, saat, fiyat veya taahhut EKLEME; olanlari da CIKARMA.\n' +
+        '- Kisa tut, samimi ve profesyonel ol; yapay zeka yazmis gibi durmasin.\n' +
+        '- Imza satirini sen ekleme.',
     },
     {
       role: 'user',

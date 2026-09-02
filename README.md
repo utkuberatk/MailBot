@@ -44,14 +44,14 @@ Google Cloud projesinde **Gmail API'yi etkinleştirmeyi** unutmayın; Discord De
 ### Açılma takibi (`PUBLIC_URL`)
 
 Takip pikseli ve video önizlemesi mailin içinden çağrılır; alıcının mail istemcisi `localhost`
-adresine ulaşamaz. Ücretsiz bir tünel açıp adresini `.env`'ye yazın:
-
-```bash
-cloudflared tunnel --url http://localhost:3000
-# çıkan https://... adresini PUBLIC_URL olarak .env'ye yazın
-```
+adresine ulaşamaz. `npm run tunnel` ücretsiz bir Cloudflare tüneli açar ve adresi `PUBLIC_URL`
+olarak `.env`'ye kendisi yazar (`MailBot.bat` bunu zaten çalıştırır). Pencere açık kaldığı sürece
+geçerlidir; kapanınca adres silinir.
 
 `PUBLIC_URL` boşken sistem çalışır ama hiçbir mail "açıldı" (yeşil) görünmez.
+
+Uygulama tünelle dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; dışarıdan yalnızca
+takip pikseli, çıkış linki ve `/media` erişilebilir.
 
 ---
 
@@ -80,6 +80,7 @@ npm run workflows    # workflow JSON'larını üret
 npm run n8n:sync     # list / backup / purge --yes / push / reset --yes
 npm run gmail:auth   # Gmail refresh token
 npm run launcher     # masaüstü kısayolu
+npm run tunnel       # cloudflared tüneli (açılma takibi)
 ```
 
 ---

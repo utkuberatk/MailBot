@@ -15,7 +15,8 @@
     "gmail:auth": "node scripts/gmail-auth.js",
     "n8n:sync": "node scripts/n8n-sync.js",
     "launcher": "node scripts/make-launcher.js",
-    "workflows": "node scripts/build-workflows.js"
+    "workflows": "node scripts/build-workflows.js",
+    "tunnel": "node scripts/tunnel.js"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",

@@ -11,21 +11,77 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { deflateSync } from 'node:zlib'
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import { optionalEnv } from '@/lib/env'
 
-const run = promisify(execFile)
+const execFileAsync = promisify(execFile)
 
 export const MEDIA_DIR = path.join(process.cwd(), 'media')
 /** Tarayiciya /media/... yolundan servis edilir. */
 export const MEDIA_URL_PREFIX = '/media'
 
-export async function hasFfmpeg(): Promise<boolean> {
+/**
+ * ffmpeg ikilisini bulur.
+ *
+ * winget ile kurulunca PATH'e her zaman eklenmiyor; bu yuzden sirasiyla
+ * FFMPEG_PATH, PATH ve winget paket klasoru denenir. Sonuc onbellege alinir.
+ */
+let ffmpegPath: string | null | undefined
+
+function wingetFfmpeg(): string | null {
+  const packages = path.join(
+    os.homedir(),
+    'AppData', 'Local', 'Microsoft', 'WinGet', 'Packages',
+  )
+
   try {
-    await run('ffmpeg', ['-version'], { timeout: 5000 })
-    return true
+    const dir = fsSync
+      .readdirSync(packages)
+      .find((name) => name.toLowerCase().startsWith('gyan.ffmpeg'))
+    if (!dir) return null
+
+    const root = path.join(packages, dir)
+    const build = fsSync.readdirSync(root).find((name) => name.startsWith('ffmpeg-'))
+    if (!build) return null
+
+    const binary = path.join(root, build, 'bin', 'ffmpeg.exe')
+    return fsSync.existsSync(binary) ? binary : null
   } catch {
-    return false
+    return null
   }
+}
+
+export async function resolveFfmpeg(): Promise<string | null> {
+  if (ffmpegPath !== undefined) return ffmpegPath
+
+  const candidates = [optionalEnv('FFMPEG_PATH'), 'ffmpeg', wingetFfmpeg() ?? '']
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      await execFileAsync(candidate, ['-version'], { timeout: 5000 })
+      ffmpegPath = candidate
+      return candidate
+    } catch {
+      // sonrakini dene
+    }
+  }
+
+  ffmpegPath = null
+  return null
+}
+
+export async function hasFfmpeg(): Promise<boolean> {
+  return (await resolveFfmpeg()) !== null
+}
+
+/** ffmpeg'i bulunan yoldan calistirir. */
+async function run(args: string[]): Promise<void> {
+  const binary = await resolveFfmpeg()
+  if (!binary) throw new Error('ffmpeg bulunamadı.')
+  await execFileAsync(binary, args, { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 })
 }
 
 // --- Minimal RGBA PNG yazici (play butonu icin; harici bagimlilik yok) ------
@@ -197,7 +253,7 @@ export async function generateThumbnail(source: string): Promise<ThumbnailResult
 
     frame = path.join(MEDIA_DIR, `frame-${stamp}.jpg`)
     // Videonun 3. saniyesinden tek kare al, en fazla 960px genislige olcekle.
-    await run('ffmpeg', [
+    await run([
       '-y', '-ss', '3', '-i', videoPath,
       '-frames:v', '1',
       '-vf', "scale='min(960,iw)':-2",
@@ -221,7 +277,7 @@ export async function generateThumbnail(source: string): Promise<ThumbnailResult
   await fs.writeFile(buttonPath, playButtonPng(160))
 
   // Kapak + ortalanmis play butonu.
-  await run('ffmpeg', [
+  await run([
     '-y', '-i', frame, '-i', buttonPath,
     '-filter_complex', '[0:v]scale=\'min(960,iw)\':-2[bg];[bg][1:v]overlay=(W-w)/2:(H-h)/2',
     '-frames:v', '1', '-q:v', '3',

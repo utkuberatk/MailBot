@@ -37,11 +37,15 @@ rem --- 3. Next.js uygulamasi ------------------------------------------------
 start "MailBot - Uygulama" cmd /c "npm run dev"
 echo   [x] Uygulama        http://localhost:3000
 
-rem --- 4. Discord botu ------------------------------------------------------
+rem --- 4. Cloudflare tuneli (acilma takibi icin) ----------------------------
+start "MailBot - Tunel" cmd /c "npm run tunnel"
+echo   [x] Tunel           acilma takibi ve mail gorselleri icin
+
+rem --- 5. Discord botu ------------------------------------------------------
 start "MailBot - Discord Bot" cmd /c "npm run bot"
 echo   [x] Discord botu    ayri pencerede
 
-rem --- 5. Tarayici ----------------------------------------------------------
+rem --- 6. Tarayici ----------------------------------------------------------
 echo.
 echo   Uygulamanin acilmasi bekleniyor...
 timeout /t 6 /nobreak >nul

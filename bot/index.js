@@ -60,8 +60,20 @@ async function pushPositiveReplies() {
   let channel
   try {
     channel = await client.channels.fetch(CHANNEL_ID)
+    if (!channel || !channel.isTextBased()) throw new Error('metin kanali degil')
   } catch {
-    console.error(`[bot] Kanal bulunamadi: ${CHANNEL_ID}. DISCORD_CHANNEL_ID dogru mu?`)
+    // En sik hata: kanal ID'si yerine sunucu ID'si girilmesi. Secenekleri yaz.
+    console.error(`\n[bot] Kanal bulunamadi: ${CHANNEL_ID}`)
+    console.error('      DISCORD_CHANNEL_ID bir METIN KANALI ID\'si olmali (sunucu ID\'si degil).')
+    console.error('      Botun erisebildigi kanallar:')
+
+    for (const guild of client.guilds.cache.values()) {
+      const channels = await guild.channels.fetch()
+      for (const item of channels.values()) {
+        if (item?.isTextBased()) console.error(`        ${guild.name} → #${item.name} = ${item.id}`)
+      }
+    }
+    console.error('')
     return
   }
 

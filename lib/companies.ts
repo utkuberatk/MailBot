@@ -48,6 +48,13 @@ const JUNK_EMAIL_PATTERNS = [
   'email.com',
   'test@',
   'user@',
+  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.
+  'eticaretsitesi.com',
+  'ideasoft.com.tr',
+  'ticimax.com',
+  'platinmarket.com',
+  'projesoft.com.tr',
+  'tsoft.com.tr',
   '.png',
   '.jpg',
   '.jpeg',
