@@ -18,7 +18,10 @@ type Quota = {
   hourlyLimit: number
   remainingToday: number
   remainingThisHour: number
+  stage: string
 }
+
+type Tracking = { enabled: boolean }
 
 type Improved = { subject: string; body: string; spamScore: number; warnings: string[] }
 
@@ -54,6 +57,7 @@ function Compose() {
   const [thumbBusy, setThumbBusy] = useState(false)
 
   const [quota, setQuota] = useState<Quota | null>(null)
+  const [tracking, setTracking] = useState<Tracking | null>(null)
   const [sending, setSending] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'ok' | 'warn'; text: string } | null>(null)
 
@@ -75,7 +79,11 @@ function Compose() {
       }
     }
 
-    if (messageResponse.ok) setQuota((await messageResponse.json()).quota)
+    if (messageResponse.ok) {
+      const data = await messageResponse.json()
+      setQuota(data.quota)
+      setTracking(data.tracking)
+    }
     setLoading(false)
   }, [searchParams])
 
@@ -219,6 +227,7 @@ function Compose() {
                 Bu saat: <strong className="tabular-nums">{quota.remainingThisHour}</strong> /{' '}
                 {quota.hourlyLimit}
               </div>
+              <div className="mt-0.5">{quota.stage}</div>
             </div>
           ) : null
         }
@@ -233,6 +242,15 @@ function Compose() {
           }}
         >
           {notice.text}
+        </div>
+      ) : null}
+
+      {tracking && !tracking.enabled ? (
+        <div className="mb-4 rounded-xl border border-[var(--color-line)] px-4 py-3 text-sm text-[var(--color-muted)]">
+          <strong className="text-[var(--color-ink)]">Açılma takibi kapalı.</strong> Mailler takip
+          pikseli ve görsel olmadan gönderiliyor — spam’e düşme riski en düşük hâlde. Gönderilenler
+          yeşil/kırmızı işaretlenmeyecek; yanıt geldiğinde yine görürsünüz. Takibi açmak için kendi
+          alan adınızı <code className="font-mono text-xs">MAIL_TRACKING_URL</code> olarak tanımlayın.
         </div>
       ) : null}
 

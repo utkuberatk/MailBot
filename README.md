@@ -36,22 +36,46 @@ başlatır ve tarayıcıyı açar.
 | `GMAIL_REFRESH_TOKEN` / `GMAIL_USER` | `npm run gmail:auth` otomatik yazar |
 | `N8N_API_KEY` | n8n → Settings → n8n API |
 | `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` / `DISCORD_OWNER_ID` | discord.com/developers |
-| `PUBLIC_URL` | Açılma takibi için dışa açık adres (opsiyonel, aşağıya bakın) |
+| `MAIL_TRACKING_URL` | Açılma takibi için **kendi alan adınız** (opsiyonel, aşağıya bakın) |
 
 Google Cloud projesinde **Gmail API'yi etkinleştirmeyi** unutmayın; Discord Developer Portal'da
 **MESSAGE CONTENT INTENT** açık olmalı.
 
-### Açılma takibi (`PUBLIC_URL`)
+### Açılma takibi ve spam (`MAIL_TRACKING_URL`)
 
-Takip pikseli ve video önizlemesi mailin içinden çağrılır; alıcının mail istemcisi `localhost`
-adresine ulaşamaz. `npm run tunnel` ücretsiz bir Cloudflare tüneli açar ve adresi `PUBLIC_URL`
-olarak `.env`'ye kendisi yazar (`MailBot.bat` bunu zaten çalıştırır). Pencere açık kaldığı sürece
-geçerlidir; kapanınca adres silinir.
+Takip pikseli ve video önizlemesi mailin **içinden** çağrılır, yani maildeki bağlantıların alan
+adı doğrudan teslimatı etkiler. Geçici tünel adresleri (`*.trycloudflare.com`, `*.ngrok-free.app`)
+oltalama için yoğun şekilde kötüye kullanıldığından, bu adreslere giden bağlantı içeren mailler
+spam'e düşer. Bu yüzden sistem bu alan adlarını ve `http://` adresleri **reddeder**.
 
-`PUBLIC_URL` boşken sistem çalışır ama hiçbir mail "açıldı" (yeşil) görünmez.
+**Varsayılan (alan adı yok):** takip kapalıdır. Mailde takip pikseli ve görsel bulunmaz, listeden
+çıkış `List-Unsubscribe: <mailto:...>` başlığıyla ve "bu mesajı yanıtlayıp *çıkar* yazın"
+cümlesiyle yapılır. Yanıtla gelen çıkış talebi otomatik yakalanır ve şirket pasifleştirilir.
+Sistemin tamamı çalışır; yalnızca yeşil/kırmızı açılma bilgisi olmaz.
 
-Uygulama tünelle dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; dışarıdan yalnızca
-takip pikseli, çıkış linki ve `/media` erişilebilir.
+#### Kendi alan adını bağlama (takibi açar)
+
+Alan adı ücretlidir; gerisi ücretsizdir.
+
+1. Alan adını Cloudflare'e ekleyin (Add a site → ücretsiz plan), nameserver'ları yönlendirin.
+2. `cloudflared tunnel login` → `cloudflared tunnel create mailbot`
+3. Tünele bir alt alan adı bağlayın:
+   `cloudflared tunnel route dns mailbot mail.alanadiniz.com`
+4. `~/.cloudflared/config.yml` içinde `mail.alanadiniz.com` → `http://localhost:3000` eşlemesini yazın.
+5. `.env`:
+   ```
+   MAIL_TRACKING_URL="https://mail.alanadiniz.com"
+   CLOUDFLARE_TUNNEL_NAME="mailbot"
+   ```
+
+Artık `MailBot.bat` tüneli otomatik başlatır, piksel ve video önizlemesi kendi alan adınızdan
+servis edilir, açılma takibi çalışır.
+
+Uygulama dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; dışarıdan yalnızca takip
+pikseli, çıkış linki ve `/media` erişilebilir.
+
+`npm run tunnel` `CLOUDFLARE_TUNNEL_NAME` boşken geçici bir tünel açar — bu adres **yalnızca
+arayüze uzaktan bakmak içindir**, mail takibinde kullanılamaz.
 
 ---
 
@@ -62,7 +86,8 @@ takip pikseli, çıkış linki ve `/media` erişilebilir.
 2. **Şirketler** — filtreleyin, elle ekleyin ya da CSV yükleyin, göndereceklerinizi seçin.
 3. **Mail Yaz** — taslağınızı yazın, *AI ile iyileştir* deyin (niyetinizi korur, sadece dili
    düzeltir ve spam skoru verir), isterseniz video ekleyin, gönderin. Mailler arasında 45-90 sn
-   beklenir; saatlik 20 / günlük 50 limiti ve warm-up uygulanır.
+   beklenir. Isınma dönemi: ilk 3 gün 5, 1. hafta 10, 2. hafta 20, 3. hafta 35, sonrasında 50
+   mail/gün. Kalan hak ve aşama sayfanın sağ üstünde yazar.
 4. **Gelen Kutusu** — *Yanıtlar* sekmesi varsayılan olarak sadece OLUMLU yanıtları gösterir; kartın
    içinden kısa bir not yazıp AI'ın düzelttiği yanıtı thread'e gönderebilirsiniz. *Gönderilenler*
    sekmesinde açılanlar yeşil, açılmayanlar kırmızı noktayla işaretlidir.

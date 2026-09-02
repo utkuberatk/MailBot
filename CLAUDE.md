@@ -217,14 +217,49 @@ hiç yanıt yoksa bunu ve nasıl yanıt toplanacağını açıklar.
 
 ## 10. Spam'e düşmeme kuralları
 
+**En kritik kural — maildeki bağlantıların alan adı.** Geçici tünel adresleri
+(`*.trycloudflare.com`, `*.ngrok-free.app` vb.) oltalama için yoğun şekilde kötüye
+kullanıldığından, bu adreslere giden bağlantı içeren mailler doğrudan spam'e düşer.
+Bu bir kez yaşandı ve teşhis edildi: mailin tek bağlantı kaynağı bir quick-tunnel
+adresiydi ve üstüne 1×1 takip pikseli eklenince klasik oltalama parmak izi oluştu.
+
+`lib/env.ts` içindeki `mailTrackingUrl()` bu yüzden `UNTRUSTED_MAIL_HOSTS` listesindeki
+alan adlarını ve `http://` adresleri reddeder. **Takip adresi olarak yalnızca kendi
+alan adınızı verin.** Adres yoksa takip kendiliğinden kapanır ve mail temiz gider.
+
+| | Takip kapalı (alan adı yok) | Takip açık (kendi alan adı) |
+|---|---|---|
+| Takip pikseli | yok | var |
+| Video önizleme görseli | yok — videonun kendi adresine düz link | var |
+| Çıkış | `List-Unsubscribe: <mailto:...>` + "yanıtlayıp çıkar yazın" | https link + One-Click |
+| Yeşil/kırmızı açılma | çalışmaz | çalışır |
+
 - [ ] Gönderim Gmail API üzerinden (SPF/DKIM/DMARC Google tarafından imzalanır).
-- [ ] Mailler arası **45–90 sn rastgele** gecikme; saatlik ≤20, günlük ≤50.
-- [ ] Warm-up: ilk hafta günlük 10, ikinci hafta 25, sonra 50.
-- [ ] Sade HTML: tek CTA linki, en fazla 1 görsel (video thumbnail). **Attachment yok.**
+- [ ] Maildeki bağlantılar yalnızca itibarlı alan adlarına gitsin (kendi alan adınız,
+      YouTube/Vimeo gibi). Tünel adresi asla maile girmez.
+- [ ] Mailler arası **45–90 sn rastgele** gecikme.
+- [ ] Warm-up (`Setting.warmup_started_at` üzerinden, `lib/mailer.ts`):
+
+      | Gün | Günlük | Saatlik |
+      |---|---|---|
+      | 1-3 | 5 | 2 |
+      | 4-7 | 10 | 3 |
+      | 8-14 | 20 | 5 |
+      | 15-21 | 35 | 10 |
+      | 22+ | `.env` (50) | `.env` (20) |
+
+      Başlangıç tarihi `Setting` tablosunda tutulur; `Message` kayıtları şirket silinince
+      cascade ile gittiği için gönderim geçmişinden hesaplanamaz.
+- [ ] Sade HTML: tek CTA linki, en fazla 1 görsel. **Attachment yok.**
 - [ ] Kişiselleştirme zorunlu: şirket adı geçmeyen mail gönderilmez (gönderim öncesi kontrol).
-- [ ] Gerçek imza + `List-Unsubscribe` başlığı + çalışan çıkış linki.
+- [ ] Gerçek imza + `List-Unsubscribe` başlığı (`mailto:` veya https).
+- [ ] Yanıtla gelen çıkış talebi (`çıkar`, `unsubscribe`, `bir daha mail göndermeyin`…)
+      `lib/inbox.ts` → `isOptOutRequest()` ile yakalanır, şirket pasifleştirilir.
 - [ ] Gönderim öncesi Groq spam taraması: çok sayıda ünlem, büyük harf blokları, "ücretsiz!!!", "hemen tıkla" → skor UI'da gösterilir, yüksekse uyarı.
 - [ ] Hata/bounce alan adres otomatik `isActive = false`.
+- [ ] **İçerik de bir tetikleyicidir:** bağlamsız, şirketle ilgisiz ya da kişisel alana
+      giren metinler filtreler tarafından oltalama kalıbı olarak okunur. Şirkete özgü,
+      ne iş yaptığınızı ve neden yazdığınızı söyleyen metin kullanın.
 
 ---
 
@@ -238,7 +273,8 @@ hiç yanıt yoksa bunu ve nasıl yanıt toplanacağını açıklar.
 | `APP_URL` | Sabit: `http://localhost:3000` | ✅ |
 | `APP_INTERNAL_API_KEY` | Kendin üret (rastgele 32 karakter) | ✅ |
 | `GROQ_API_KEY` | console.groq.com → API Keys | ✅ |
-| `PUBLIC_URL` | `npm run tunnel` otomatik yazar. Boşsa açılma takibi ve mail görselleri çalışmaz | ➖ |
+| `MAIL_TRACKING_URL` | **Kendi alan adınız** (`https://mail.alanadiniz.com`). Tünel adresleri reddedilir. Boşsa takip kapanır, mailler daha temiz gider | ➖ |
+| `CLOUDFLARE_TUNNEL_NAME` | Kalıcı tünel adı; doluysa `MailBot.bat` tüneli açar | ➖ |
 | `FFMPEG_PATH` / `CLOUDFLARED_PATH` | Araçlar PATH'te değilse tam yol (genelde gerekmez) | ➖ |
 | `GROQ_MODEL` | Groq model listesinden (varsayılan: `openai/gpt-oss-120b`) | ✅ |
 | `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | Google Cloud Console → OAuth (Desktop app) | ✅ |

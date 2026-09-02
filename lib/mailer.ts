@@ -14,21 +14,44 @@ import { sendMail } from '@/lib/gmail'
 
 const DAY = 24 * 60 * 60 * 1000
 
-/** Warm-up: ilk hafta 10, ikinci hafta 25, sonrasinda .env limiti. */
-async function dailyLimit(): Promise<number> {
-  const configured = env.sendLimits().daily
-  const first = await db.message.findFirst({
-    where: { sentAt: { not: null } },
-    orderBy: { sentAt: 'asc' },
-    select: { sentAt: true },
+const WARMUP_KEY = 'warmup_started_at'
+
+/**
+ * Isinma kademeleri.
+ *
+ * Yeni bir Gmail hesabindan birdenbire onlarca soguk mail cikmasi, hesabin
+ * itibarini bozan en hizli yoldur. Gunluk hacim kademeli acilir.
+ */
+const WARMUP_STAGES = [
+  { untilDay: 3, daily: 5, hourly: 2, label: 'Isınma: ilk 3 gün' },
+  { untilDay: 7, daily: 10, hourly: 3, label: 'Isınma: 1. hafta' },
+  { untilDay: 14, daily: 20, hourly: 5, label: 'Isınma: 2. hafta' },
+  { untilDay: 21, daily: 35, hourly: 10, label: 'Isınma: 3. hafta' },
+]
+
+/**
+ * Isinmanin basladigi an.
+ *
+ * Setting tablosunda tutulur; Message kayitlari sirket silinince cascade ile
+ * gittigi icin gonderim gecmisinden hesaplanamaz — oyle olsaydi sirketleri
+ * silmek isinma sayacini sifirlar ve hesabi riske atardi.
+ */
+async function warmupStartedAt(): Promise<Date | null> {
+  const setting = await db.setting.findUnique({ where: { key: WARMUP_KEY } })
+  if (!setting) return null
+
+  const date = new Date(setting.value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** Ilk basarili gonderimde bir kez yazilir. */
+async function markWarmupStarted(): Promise<void> {
+  const now = new Date().toISOString()
+  await db.setting.upsert({
+    where: { key: WARMUP_KEY },
+    update: {},
+    create: { key: WARMUP_KEY, value: now },
   })
-
-  if (!first?.sentAt) return Math.min(10, configured)
-
-  const days = (Date.now() - first.sentAt.getTime()) / DAY
-  if (days < 7) return Math.min(10, configured)
-  if (days < 14) return Math.min(25, configured)
-  return configured
 }
 
 export type Quota = {
@@ -38,18 +61,28 @@ export type Quota = {
   sentThisHour: number
   remainingToday: number
   remainingThisHour: number
+  /** Kullaniciya gosterilecek asama adi. */
+  stage: string
+  warmupDay: number | null
 }
 
-/** Kalan gonderim hakki — UI ve kuyruk ayni fonksiyonu kullanir. */
+/** Kalan gonderim hakki — UI, kuyruk ve Discord ayni fonksiyonu kullanir. */
 export async function getQuota(): Promise<Quota> {
   const now = Date.now()
-  const [daily, sentToday, sentThisHour] = await Promise.all([
-    dailyLimit(),
+  const configured = env.sendLimits()
+
+  const [started, sentToday, sentThisHour] = await Promise.all([
+    warmupStartedAt(),
     db.message.count({ where: { status: 'SENT', sentAt: { gte: new Date(now - DAY) } } }),
     db.message.count({ where: { status: 'SENT', sentAt: { gte: new Date(now - 60 * 60 * 1000) } } }),
   ])
 
-  const hourly = env.sendLimits().hourly
+  // Henuz hic gonderim yapilmadiysa ilk kademe gecerlidir.
+  const day = started ? Math.floor((now - started.getTime()) / DAY) + 1 : 1
+  const stage = WARMUP_STAGES.find((item) => day <= item.untilDay)
+
+  const daily = stage ? Math.min(stage.daily, configured.daily) : configured.daily
+  const hourly = stage ? Math.min(stage.hourly, configured.hourly) : configured.hourly
 
   return {
     dailyLimit: daily,
@@ -58,6 +91,8 @@ export async function getQuota(): Promise<Quota> {
     sentThisHour,
     remainingToday: Math.max(0, daily - sentToday),
     remainingThisHour: Math.max(0, hourly - sentThisHour),
+    stage: stage ? `${stage.label} (${day}. gün)` : 'Tam kapasite',
+    warmupDay: started ? day : null,
   }
 }
 
@@ -103,14 +138,37 @@ export type MailContent = {
   trackingId: string
 }
 
+/** Cikis talebini yanit olarak isteyen cumle — takip kapaliyken kullanilir. */
+const REPLY_TO_UNSUBSCRIBE =
+  'Bu mailleri almak istemiyorsanız bu mesajı yanıtlayıp "çıkar" yazmanız yeterli.'
+
 /**
- * Sade HTML govde: tek CTA, en fazla bir gorsel, attachment yok.
- * Sonunda imza, cikis linki ve 1x1 takip pikseli.
+ * `List-Unsubscribe` baslik degeri.
+ *
+ * Kendi alan adimiz yoksa mailto: bicimi kullanilir — Gmail bunu destekler,
+ * hicbir altyapi gerektirmez ve itibarsiz bir alan adi maile girmez.
+ */
+export function listUnsubscribeHeader(trackingId: string): { value: string; oneClick: boolean } {
+  const trackingUrl = env.mailTrackingUrl()
+
+  if (trackingUrl) {
+    return { value: `<${trackingUrl}/api/unsubscribe/${trackingId}>`, oneClick: true }
+  }
+
+  const address = env.gmailUser()
+  return { value: `<mailto:${address}?subject=Listeden%20cikar>`, oneClick: false }
+}
+
+/**
+ * Sade HTML govde: tek CTA, attachment yok.
+ *
+ * Takip kapaliyken (kendi alan adimiz yokken) mailde hicbir gorsel, takip
+ * pikseli veya bize ait link bulunmaz — spam filtrelerinin en cok tepki
+ * verdigi seyler bunlar.
  */
 export function buildHtml(content: MailContent): string {
-  const appUrl = env.publicUrl()
+  const trackingUrl = env.mailTrackingUrl()
   const sender = env.sender()
-  const unsubscribeUrl = `${appUrl}/api/unsubscribe/${content.trackingId}`
 
   const paragraphs = content.body
     .split(/\n{2,}/)
@@ -119,20 +177,29 @@ export function buildHtml(content: MailContent): string {
     .map((block) => `<p style="margin:0 0 14px">${block}</p>`)
     .join('')
 
-  const video =
-    content.videoUrl && content.videoThumbUrl
+  // Gorsel yalnizca kendi alan adimizdan servis edilebiliyorsa gomulur;
+  // aksi halde videonun kendi adresine (YouTube/Vimeo) duz bir link verilir.
+  const video = !content.videoUrl
+    ? ''
+    : trackingUrl && content.videoThumbUrl
       ? `<p style="margin:0 0 18px"><a href="${escapeHtml(content.videoUrl)}">` +
         `<img src="${escapeHtml(content.videoThumbUrl)}" alt="Videoyu izleyin" ` +
         `width="480" style="max-width:100%;border-radius:8px;display:block"></a></p>`
-      : content.videoUrl
-        ? `<p style="margin:0 0 18px"><a href="${escapeHtml(content.videoUrl)}" ` +
-          `style="color:#2563eb">Kısa videoyu izleyin</a></p>`
-        : ''
+      : `<p style="margin:0 0 18px"><a href="${escapeHtml(content.videoUrl)}" ` +
+        `style="color:#2563eb">Kısa videoyu izleyin</a></p>`
 
   const signature = [sender.name, sender.title, sender.address]
     .filter(Boolean)
     .map(escapeHtml)
     .join('<br>')
+
+  const unsubscribe = trackingUrl
+    ? `Bu maili almak istemiyorsanız <a href="${trackingUrl}/api/unsubscribe/${content.trackingId}" style="color:#9ca3af">listeden çıkabilirsiniz</a>.`
+    : escapeHtml(REPLY_TO_UNSUBSCRIBE)
+
+  const pixel = trackingUrl
+    ? `\n<img src="${trackingUrl}/api/track/${content.trackingId}" width="1" height="1" alt="" style="display:block">`
+    : ''
 
   return `<!doctype html>
 <html lang="tr"><body style="margin:0;padding:0;background:#ffffff">
@@ -141,20 +208,24 @@ ${paragraphs}
 ${video}
 <p style="margin:24px 0 0;color:#4b5563;font-size:14px">${signature}</p>
 <p style="margin:18px 0 0;color:#9ca3af;font-size:12px">
-Bu maili almak istemiyorsanız <a href="${unsubscribeUrl}" style="color:#9ca3af">listeden çıkabilirsiniz</a>.
-</p>
-<img src="${appUrl}/api/track/${content.trackingId}" width="1" height="1" alt="" style="display:block">
+${unsubscribe}
+</p>${pixel}
 </div></body></html>`
 }
 
 /** HTML'siz istemciler icin duz metin surumu. */
 export function buildText(content: MailContent): string {
+  const trackingUrl = env.mailTrackingUrl()
   const sender = env.sender()
   const parts = [content.body.trim()]
 
   if (content.videoUrl) parts.push(`Video: ${content.videoUrl}`)
   parts.push([sender.name, sender.title, sender.address].filter(Boolean).join('\n'))
-  parts.push(`Listeden çıkmak için: ${env.publicUrl()}/api/unsubscribe/${content.trackingId}`)
+  parts.push(
+    trackingUrl
+      ? `Listeden çıkmak için: ${trackingUrl}/api/unsubscribe/${content.trackingId}`
+      : REPLY_TO_UNSUBSCRIBE,
+  )
 
   return parts.join('\n\n')
 }
@@ -207,9 +278,10 @@ export async function queueCampaign(
     const content: MailContent = {
       body,
       videoUrl: campaign.videoUrl,
-      videoThumbUrl: campaign.videoThumbPath
-        ? `${env.publicUrl()}${campaign.videoThumbPath}`
-        : null,
+      videoThumbUrl:
+        campaign.videoThumbPath && env.mailTrackingUrl()
+          ? `${env.mailTrackingUrl()}${campaign.videoThumbPath}`
+          : null,
       trackingId,
     }
 
@@ -259,9 +331,14 @@ async function sendOne(message: {
   const content: MailContent = {
     body: campaign && company ? renderTemplate(campaign.bodyTemplate, company) : '',
     videoUrl: campaign?.videoUrl,
-    videoThumbUrl: campaign?.videoThumbPath ? `${env.publicUrl()}${campaign.videoThumbPath}` : null,
+    videoThumbUrl:
+      campaign?.videoThumbPath && env.mailTrackingUrl()
+        ? `${env.mailTrackingUrl()}${campaign.videoThumbPath}`
+        : null,
     trackingId: message.trackingId,
   }
+
+  const unsubscribe = listUnsubscribeHeader(message.trackingId)
 
   try {
     const sent = await sendMail({
@@ -269,7 +346,8 @@ async function sendOne(message: {
       subject: message.subject,
       html: message.bodyHtml,
       text: buildText(content),
-      unsubscribeUrl: `${env.publicUrl()}/api/unsubscribe/${message.trackingId}`,
+      listUnsubscribe: unsubscribe.value,
+      listUnsubscribeOneClick: unsubscribe.oneClick,
     })
 
     await db.message.update({
@@ -282,6 +360,8 @@ async function sendOne(message: {
         error: null,
       },
     })
+
+    await markWarmupStarted()
     return true
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error)

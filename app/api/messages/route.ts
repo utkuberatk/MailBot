@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { getQuota, startQueue, workerState } from '@/lib/mailer'
+import { env } from '@/lib/env'
 import type { Prisma } from '@/generated/prisma/client'
 
 /**
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
     },
     quota,
     worker: workerState(),
+    tracking: { enabled: env.trackingEnabled() },
   })
 }
 

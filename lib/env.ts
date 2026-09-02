@@ -39,17 +39,59 @@ export function missingKeys(keys: string[]): string[] {
   return keys.filter((key) => !process.env[key] || process.env[key]!.trim() === '')
 }
 
+/**
+ * Gecici tunel / yerel adresler — mail iceriginde kullanilamaz.
+ * Bu alan adlarina giden linkler mailin spam'e dusmesine yol acar.
+ */
+const UNTRUSTED_MAIL_HOSTS = [
+  'trycloudflare.com',
+  'ngrok-free.app',
+  'ngrok-free.dev',
+  'ngrok.io',
+  'ngrok.app',
+  'loca.lt',
+  'serveo.net',
+  'localhost.run',
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+]
+
+/** Mail icine konabilecek bir adres mi? (https + kalici alan adi) */
+export function isTrustedMailUrl(value: string): boolean {
+  let host: string
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:') return false
+    host = url.hostname.toLowerCase()
+  } catch {
+    return false
+  }
+
+  return !UNTRUSTED_MAIL_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`))
+}
+
 export const env = {
   appUrl: () => optionalEnv('APP_URL', 'http://localhost:3000'),
 
   /**
    * Maillerin icinden cagrilan adres (takip pikseli, video onizleme, cikis linki).
-   * Alicinin mail istemcisi localhost'a ulasamaz; disariya acik bir tunel adresi
-   * (ornegin cloudflared) PUBLIC_URL olarak verilmelidir. Yoksa APP_URL kullanilir
-   * ve acilma takibi calismaz.
+   *
+   * Sadece SAHIP OLDUGUNUZ bir alan adi verilmelidir. Gecici tunel adresleri
+   * (trycloudflare, ngrok...) oltalama icin yogun sekilde kotuye kullanildigindan
+   * spam filtreleri bu alan adlarina giden linkleri iceren mailleri dogrudan
+   * spam'e atar — bu yuzden asagidaki liste reddedilir.
+   *
+   * Bos veya gecersizse takip kapanir: mailde piksel ve gorsel olmaz,
+   * listeden cikis mailto: ile yapilir. Sistem calismaya devam eder.
    */
-  publicUrl: () => optionalEnv('PUBLIC_URL', optionalEnv('APP_URL', 'http://localhost:3000')),
-  hasPublicUrl: () => optionalEnv('PUBLIC_URL') !== '',
+  mailTrackingUrl: () => {
+    const value = optionalEnv('MAIL_TRACKING_URL').trim().replace(/\/$/, '')
+    if (!value || !isTrustedMailUrl(value)) return ''
+    return value
+  },
+  trackingEnabled: () => env.mailTrackingUrl() !== '',
+
   internalApiKey: () => requireEnv('APP_INTERNAL_API_KEY'),
 
   groqApiKey: () => requireEnv('GROQ_API_KEY'),

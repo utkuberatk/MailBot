@@ -14,7 +14,41 @@ export type SyncResult = {
   scanned: number
   newReplies: number
   positive: number
+  optOuts: number
   errors: string[]
+}
+
+/**
+ * Listeden cikis talebi mi?
+ *
+ * Kendi alan adimiz yokken cikis linki yerine "yanitlayip cikar yazin"
+ * deniyor; bu yuzden talep duz metinden yakalanmali. Groq'un NEGATIVE
+ * demesini beklemeyiz — talep kacirilirsa ayni adrese tekrar mail gider.
+ */
+export function isOptOutRequest(text: string): boolean {
+  const normalized = text
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[ıİ]/g, 'i')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .replace(/ö/g, 'o')
+    .replace(/ş/g, 's')
+    .replace(/ü/g, 'u')
+
+  const patterns = [
+    /\bcikar\b/,
+    /\bcikart\w*/,
+    /listeden\s+cik/,
+    /listenizden/,
+    /unsubscribe/,
+    /abonelik\w*\s+iptal/,
+    /bir\s+daha\s+(mail|e-?posta|mesaj)/,
+    /(mail|e-?posta|mesaj)\s+g[oö]nderme/,
+    /rahatsiz\s+etmey/,
+    /\bspam\b/,
+  ]
+
+  return patterns.some((pattern) => pattern.test(normalized))
 }
 
 /** Son 30 gunde gonderilmis mailleri tarar. */
@@ -26,7 +60,13 @@ export async function syncInbox(): Promise<SyncResult> {
     select: { id: true, gmailThreadId: true, toEmail: true },
   })
 
-  const result: SyncResult = { scanned: messages.length, newReplies: 0, positive: 0, errors: [] }
+  const result: SyncResult = {
+    scanned: messages.length,
+    newReplies: 0,
+    positive: 0,
+    optOuts: 0,
+    errors: [],
+  }
 
   for (const message of messages) {
     try {
@@ -63,12 +103,23 @@ export async function syncInbox(): Promise<SyncResult> {
         result.newReplies++
         if (analysis.sentiment === 'POSITIVE') result.positive++
 
-        // Otomatik yanit/cikis talebi gelen adrese bir daha gonderme.
-        if (analysis.sentiment === 'NEGATIVE') {
+        // Cikis talebi ve olumsuz yanit gelen adrese bir daha gonderme.
+        // Cikis artik mail yanitiyla yapildigi icin anahtar kelime kontrolu
+        // AI'in kararindan bagimsiz calisir — talep kacirilmamali.
+        const optOut = isOptOutRequest(reply.text)
+        if (optOut || analysis.sentiment === 'NEGATIVE') {
           await db.message.update({
             where: { id: message.id },
-            data: { company: { update: { isActive: false } } },
+            data: {
+              company: {
+                update: {
+                  isActive: false,
+                  notes: optOut ? 'Yanıtla listeden çıkış talebi' : 'Olumsuz yanıt',
+                },
+              },
+            },
           })
+          if (optOut) result.optOuts++
         }
       }
     } catch (error) {

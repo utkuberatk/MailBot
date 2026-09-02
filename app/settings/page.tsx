@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 type Group = {
   title: string
   note: string
-  keys: { key: string; where: string }[]
+  keys: { key: string; where: string; optional?: boolean }[]
 }
 
 const GROUPS: Group[] = [
@@ -26,8 +26,9 @@ const GROUPS: Group[] = [
       { key: 'SENDER_TITLE', where: 'Unvan (örn. Kurucu)' },
       { key: 'SENDER_ADDRESS', where: 'İmzada görünen iletişim adresi' },
       {
-        key: 'PUBLIC_URL',
-        where: 'Dışarıya açık adres — boşsa açılma takibi ve görsel çalışmaz (cloudflared tunnel)',
+        key: 'MAIL_TRACKING_URL',
+        where: 'Kendi alan adınız (https://mail...). Boşsa takip kapalı — mailler daha temiz gider',
+        optional: true,
       },
     ],
   },
@@ -66,8 +67,11 @@ const GROUPS: Group[] = [
 ]
 
 export default function SettingsPage() {
-  const allKeys = GROUPS.flatMap((g) => g.keys.map((k) => k.key))
-  const missing = new Set(missingKeys(allKeys))
+  // Opsiyonel anahtarlar "eksik" sayilmaz; bos olmalari gecerli bir durum.
+  const requiredKeys = GROUPS.flatMap((g) => g.keys.filter((k) => !k.optional).map((k) => k.key))
+  const missing = new Set(missingKeys(requiredKeys))
+  const optional = new Set(GROUPS.flatMap((g) => g.keys.filter((k) => k.optional).map((k) => k.key)))
+  const unset = new Set(missingKeys([...optional]))
 
   return (
     <>
@@ -97,6 +101,7 @@ export default function SettingsPage() {
             <ul className="mt-3 divide-y divide-[var(--color-line)]">
               {group.keys.map(({ key, where }) => {
                 const isMissing = missing.has(key)
+                const isOptionalUnset = unset.has(key)
                 return (
                   <li key={key} className="flex items-center justify-between gap-4 py-2.5">
                     <div className="min-w-0">
@@ -106,11 +111,19 @@ export default function SettingsPage() {
                     <span
                       className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
                       style={{
-                        background: isMissing ? 'var(--color-warn-soft)' : 'var(--color-ok-soft)',
-                        color: isMissing ? 'var(--color-warn)' : 'var(--color-ok)',
+                        background: isMissing
+                          ? 'var(--color-warn-soft)'
+                          : isOptionalUnset
+                            ? 'var(--color-canvas)'
+                            : 'var(--color-ok-soft)',
+                        color: isMissing
+                          ? 'var(--color-warn)'
+                          : isOptionalUnset
+                            ? 'var(--color-muted)'
+                            : 'var(--color-ok)',
                       }}
                     >
-                      {isMissing ? 'Eksik' : 'Tanımlı'}
+                      {isMissing ? 'Eksik' : isOptionalUnset ? 'Kapalı' : 'Tanımlı'}
                     </span>
                   </li>
                 )

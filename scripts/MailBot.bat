@@ -37,9 +37,15 @@ rem --- 3. Next.js uygulamasi ------------------------------------------------
 start "MailBot - Uygulama" cmd /c "npm run dev"
 echo   [x] Uygulama        http://localhost:3000
 
-rem --- 4. Cloudflare tuneli (acilma takibi icin) ----------------------------
-start "MailBot - Tunel" cmd /c "npm run tunnel"
-echo   [x] Tunel           acilma takibi ve mail gorselleri icin
+rem --- 4. Kalici Cloudflare tuneli (yalnizca alan adi baglanmissa) ----------
+rem Gecici tunel adresleri maile konamaz, o yuzden burada acilmaz.
+findstr /R /C:"^CLOUDFLARE_TUNNEL_NAME=\"..*\"" .env >nul 2>&1
+if errorlevel 1 (
+  echo   [ ] Tunel           kapali - acilma takibi devre disi
+) else (
+  start "MailBot - Tunel" cmd /c "npm run tunnel"
+  echo   [x] Tunel           acilma takibi acik
+)
 
 rem --- 5. Discord botu ------------------------------------------------------
 start "MailBot - Discord Bot" cmd /c "npm run bot"

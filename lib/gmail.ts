@@ -95,8 +95,10 @@ export type OutgoingMail = {
   /** Yanit gonderirken: yanitlanacak mesajin Message-ID basligi. */
   inReplyTo?: string
   threadId?: string
-  /** Cikis linki — List-Unsubscribe basligina konur. */
-  unsubscribeUrl?: string
+  /** Hazir `List-Unsubscribe` baslik degeri (`<mailto:...>` veya `<https://...>`). */
+  listUnsubscribe?: string
+  /** One-Click yalnizca https uc ile anlamli; mailto bicimde gonderilmez. */
+  listUnsubscribeOneClick?: boolean
 }
 
 /** text/plain + text/html alternatifi iceren MIME mesaji kurar. */
@@ -116,12 +118,12 @@ export function buildMime(mail: OutgoingMail): string {
     headers.push(`In-Reply-To: ${mail.inReplyTo}`, `References: ${mail.inReplyTo}`)
   }
 
-  // Spam filtreleri icin: tek tikla cikis. Gmail bu basligi arayuzde gosterir.
-  if (mail.unsubscribeUrl) {
-    headers.push(
-      `List-Unsubscribe: <${mail.unsubscribeUrl}>`,
-      'List-Unsubscribe-Post: List-Unsubscribe=One-Click',
-    )
+  // Spam filtreleri icin: cikis yolu. Gmail bu basligi arayuzde gosterir.
+  if (mail.listUnsubscribe) {
+    headers.push(`List-Unsubscribe: ${mail.listUnsubscribe}`)
+    if (mail.listUnsubscribeOneClick) {
+      headers.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click')
+    }
   }
 
   const body = [

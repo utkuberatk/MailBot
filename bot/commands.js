@@ -143,6 +143,7 @@ async function durum(message) {
         name: 'Kalan kota',
         value: `bugün ${stats.quota.remainingToday}/${stats.quota.dailyLimit} · bu saat ${stats.quota.remainingThisHour}/${stats.quota.hourlyLimit}`,
       },
+      { name: 'Aşama', value: stats.quota.stage || '—' },
     )
     .setTimestamp(new Date())
 
