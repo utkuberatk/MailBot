@@ -13,11 +13,14 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "gmail:auth": "node scripts/gmail-auth.js",
-    "n8n:sync": "node scripts/n8n-sync.js"
+    "n8n:sync": "node scripts/n8n-sync.js",
+    "launcher": "node scripts/make-launcher.js",
+    "workflows": "node scripts/build-workflows.js"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
     "next": "^16.3.4",
     "react": "^19.2.8",

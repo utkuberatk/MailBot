@@ -54,7 +54,7 @@ Gmail OAuth token'ı yalnızca Next.js tarafında durur; n8n ve bot mail gönder
 | Uygulama | Next.js 16 (App Router) + TypeScript + Tailwind 4 | Tek proje, tek port, UI + API birlikte |
 | Veritabanı | SQLite + Prisma 7 (`better-sqlite3` driver adapter) | Kurulum gerektirmez, dosya bazlı, local |
 | Arama | SearXNG (local Docker) | Ücretsiz, kotasız, API key yok |
-| AI | Groq API | Ücretsiz katman, çok hızlı |
+| AI | Groq API (`openai/gpt-oss-120b`) | Ücretsiz katman, çok hızlı, JSON modu var |
 | Mail | Gmail API (OAuth2, Desktop app) | Thread/message ID takibi, güvenilir yanıt eşleştirme |
 | Otomasyon | n8n (localhost:5678) | Discovery hattı ve zamanlanmış görevler |
 | Bot | discord.js v14, ayrı process | Uzaktan kontrol |
@@ -111,55 +111,53 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - Sol menü + Panel + `/settings` (eksik anahtarları gösterir) + faz sayfaları için yer tutucular.
 - **Bitti:** `npm run dev` → localhost:3000 çalışıyor, `npx next build` temiz geçiyor.
 
-### 🔶 Faz 2 — Altyapı servisleri (SearXNG bitti, n8n temizliği anahtar bekliyor)
-- ✅ SearXNG çalışıyor: `docker compose -f infra/docker-compose.yml up -d`, `format=json` doğrulandı.
-- ✅ `scripts/n8n-sync.js` yazıldı: `list` / `backup` / `purge --yes` / `push` / `reset --yes`.
-- ⏳ Kullanıcı `.env`'ye `N8N_API_KEY` ekleyince çalıştır: `node scripts/n8n-sync.js backup` → listeyi kullanıcıya göster → onay al → `node scripts/n8n-sync.js purge --yes`.
-- **Bitti:** Eski workflow'lar yedeklendi ve silindi.
+### ✅ Faz 2 — Altyapı servisleri (tamamlandı)
+- SearXNG: `docker compose -f infra/docker-compose.yml up -d`, `format=json` doğrulandı.
+- `scripts/n8n-sync.js`: `list` / `backup` / `purge --yes` / `push` / `reset --yes`.
+- Eski 3 workflow (LeadBot 1-2-3) `n8n/workflows/_backup/` altına yedeklendi ve kullanıcı onayıyla silindi.
 
-### 🔶 Faz 3 — Discovery hattı (kod hazır, anahtar bekliyor)
-- ✅ `n8n/workflows/mailbot-discovery.json` (12 node) yazıldı. Üreteci: `node scripts/build-workflows.js` — workflow'u elle düzenlemeyin, üreteci düzenleyip yeniden çalıştırın.
-- ✅ Akış: `Webhook` → app'ten arama sorguları → SearXNG → domain dedupe + pazaryeri/sosyal medya elemesi → ana sayfa + `/iletisim` çek → e-posta/telefon regex çıkarımı → app'ten sınıflandırma → `POST /api/n8n/companies` → `POST /api/n8n/runs/finish`.
-- ✅ App uçları: `/api/discover`, `/api/discover/runs`, `/api/ai/queries`, `/api/ai/classify`, `/api/n8n/companies`, `/api/n8n/runs/finish`. `/discover` sayfası prompt + canlı durum + sonuç tablosu.
+### ✅ Faz 3 — Discovery hattı (tamamlandı)
+- `n8n/workflows/mailbot-discovery.json` (12 node) n8n'e yüklendi ve aktif.
+- Akış: `Webhook` → app'ten arama sorguları → SearXNG → domain dedupe + pazaryeri/sosyal medya elemesi → ana sayfa + `/iletisim` çek → e-posta/telefon regex çıkarımı → app'ten sınıflandırma → `POST /api/n8n/companies` → `POST /api/n8n/runs/finish`.
+- Workflow'ları elle düzenlemeyin: `npm run workflows` (üretici) → `npm run n8n:sync push`.
 - **Servis adresleri n8n'e webhook gövdesiyle geçilir** (`appUrl`, `searxngUrl`) — n8n tarafında kimlik bilgisi/ayar tutmaya gerek yok. n8n Docker içindeyse `.env`'de bu adresleri `host.docker.internal` ile yazın.
-- ⏳ Kalan: `N8N_API_KEY` + `GROQ_API_KEY` geldiğinde `node scripts/n8n-sync.js push` → `/discover` üzerinden uçtan uca dene.
-- **Bitti:** UI'dan prompt girilince şirketler iletişim bilgileriyle tabloya düşüyor.
+- ⏳ Uçtan uca deneme SearXNG konteyneri ayağa kalkınca yapılır (Docker Desktop kapalıydı).
 
 ### ✅ Faz 4 — Şirket yönetimi (tamamlandı)
 - `/companies`: arama, şehir/sektör/e-posta filtreleri, çoklu seçim, toplu silme, seçilenlerle `/compose`'a geçiş.
 - Elle ekleme (aynı alan adı varsa 409) + CSV içe aktarma (`,` ve `;` ayırıcı, TR/EN başlıklar, başlıksız dosyalarda sıralı eşleme).
 - Uçlar: `/api/companies` (GET/POST/DELETE), `/api/companies/import`.
 
-### 🔶 Faz 5 — Mail yazma, iyileştirme, gönderim (başlandı)
-- ✅ `scripts/gmail-auth.js` yazıldı: loopback OAuth akışı, refresh token ve hesap adresini `.env`'ye kendi yazar.
-- ⏳ Kalan: `lib/gmail.ts` (MIME + gönderim), `lib/mailer.ts` (kuyruk + hız limiti), `/api/ai/improve`, `/api/messages/send`, `/api/track/[trackingId]`, `/compose` sayfası, ffmpeg ile video thumbnail.
-- `node scripts/gmail-auth.js` → tarayıcıda onay → refresh token `.env`'ye yazılır.
-- `/compose`: taslak yaz → **"AI ile iyileştir"** (Groq; kullanıcının niyetini ve tonunu korur, sadece dili/akışı düzeltir) → video linki gir → ffmpeg ile play butonlu thumbnail üret → seçili şirketlere kuyruklu gönderim.
-- Tracking pixel: `/api/track/[trackingId]` → 1x1 PNG döner, `openedAt` yazar.
-- Gönderim kuyruğu bölüm 10'daki hız limitlerine uyar.
-- **Bitti:** Test adrese mail gidiyor; mail açılınca kayıt yeşile dönüyor.
+### ✅ Faz 5 — Mail yazma, iyileştirme, gönderim (kod tamam, Gmail API etkinleştirmesi bekliyor)
+- `lib/gmail.ts`: OAuth refresh, MIME kurulumu (text+html, RFC 2047 başlık kodlaması), gönderim, thread okuma.
+- `lib/mailer.ts`: kuyruk, 45-90 sn rastgele gecikme, saatlik/günlük limit, warm-up (1. hafta 10, 2. hafta 25, sonra `.env`), kişiselleştirme kontrolü, bounce'ta `isActive=false`.
+- `lib/video.ts`: YouTube/Vimeo kapak indirme + ffmpeg ile play butonlu önizleme (play butonu PNG'si saf Node ile üretilir, harici bağımlılık yok). ffmpeg yoksa kapak görseli butonsuz kullanılır.
+- Uçlar: `/api/ai/improve`, `/api/messages` (liste + kuyruğu sürdür), `/api/messages/send`, `/api/track/[trackingId]`, `/api/unsubscribe/[trackingId]`, `/api/video/thumbnail`, `/media/[...file]`.
+- `/compose`: taslak → "AI ile iyileştir" (spam skoru + uyarılar) → video önizleme → seçili şirketlere kuyruklu gönderim. Onaylanan metinde şirket adı `{{company}}` değişkenine geri çevrilir.
+- **`PUBLIC_URL`:** takip pikseli ve görseller mailin içinden çağrıldığı için dışarıya açık bir adres gerekir (`cloudflared tunnel --url http://localhost:3000`). Boşsa `APP_URL` kullanılır ve açılma takibi çalışmaz.
+- ✅ Doğrulandı: piksel `openedAt`/`openCount` yazıyor, çıkış linki şirketi pasifleştiriyor.
+- ⏳ Gerçek gönderim, Google Cloud projesinde Gmail API etkinleştirilince denenecek.
 
-### Faz 6 — Gelen kutusu + analiz
-- n8n workflow **`mailbot-inbox-sync`** (3 dakikada bir) → `POST /api/jobs/sync-inbox`.
-- Uygulama Gmail'den thread yanıtlarını çeker, `Reply` kaydı açar, Groq ile duygu analizi yapar.
-- `/inbox`: gönderilen mailler yeşil/kırmızı rozetle; **"Sadece OLUMLU" filtresi varsayılan açık**.
-- **Bitti:** Gelen yanıt otomatik sınıflandırılıp doğru renkle listede.
+### ✅ Faz 6 — Gelen kutusu + analiz (kod tamam)
+- `n8n/workflows/mailbot-inbox-sync.json` (3 dakikada bir) → `POST /api/jobs/sync-inbox`. n8n'e yüklendi ve aktif.
+- `lib/inbox.ts`: son 30 günün thread'lerini tarar, alıntılanan metni ayıklar, `Reply` açar, Groq ile duygu analizi yapar; NEGATIVE gelen şirketi pasifleştirir.
+- Uçlar: `/api/jobs/sync-inbox`, `/api/replies` (GET/PATCH), `/api/replies/[id]/answer`, `/api/stats`.
+- `/inbox`: "Yanıtlar" sekmesinde **"Sadece OLUMLU" filtresi varsayılan açık**, kart içinden AI destekli yanıtlama; "Gönderilenler" sekmesinde yeşil/kırmızı nokta (`openedAt`).
 
-### Faz 7 — Discord bot
-- discord.js v14, `bot/` altında ayrı process. Sadece `DISCORD_OWNER_ID` komut çalıştırabilir.
-- Yeni **POZİTİF** yanıt → belirlenen kanala embed bildirim (şirket, özet, mail ID).
-- Komutlar bölüm 9'da.
-- **Bitti:** Discord'dan gönderilen yanıt gerçekten karşı tarafın mailine düşüyor.
+### ✅ Faz 7 — Discord bot (kod tamam, MESSAGE CONTENT INTENT bekliyor)
+- discord.js v14, `bot/` altında ayrı process: `index.js` (giriş + bildirim döngüsü), `api.js` (HTTP istemcisi), `commands.js` (komutlar).
+- Sadece `DISCORD_OWNER_ID` komut çalıştırabilir. Bot DB'ye dokunmaz, sadece uygulamanın API'sini çağırır.
+- Dakikada bir `/api/replies?sentiment=POSITIVE&notified=0` yoklanır → embed bildirim → `PATCH /api/replies` ile işaretlenir.
+- ⏳ Discord Developer Portal → Bot → **MESSAGE CONTENT INTENT** açılmalı (kapalıyken "Used disallowed intents" hatası verir).
 
-### Faz 8 — Teslimat & kısayol
-- Bölüm 10 spam checklist'i uygulanır ve doğrulanır.
-- `MailBot.bat` üretilir ve masaüstüne kopyalanır: SearXNG kontrolü → Next.js → Discord botu → tarayıcı açılır.
-- **Bitti:** Masaüstündeki `.bat` tek tıkla sistemi ayağa kaldırıyor.
+### ✅ Faz 8 — Teslimat & kısayol (tamamlandı)
+- `scripts/MailBot.bat` şablonu + `npm run launcher` → masaüstüne mutlak yollu kopya yazar.
+- Sırasıyla: SearXNG (Docker varsa) → n8n kontrolü → `npm run dev` → `npm run bot` → tarayıcı.
+- Spam checklist'i bölüm 10'da; kuyruk, limitler, tek CTA, tek görsel, `List-Unsubscribe`, kişiselleştirme kontrolü ve bounce pasifleştirme uygulanmış durumda.
 
 ### Faz 9 — Sağlamlaştırma
-- Groq rate-limit kuyruğu (ücretsiz katman ~30 istek/dk), hata yakalama, retry.
-- n8n workflow JSON'ları `n8n/workflows/` altına export edilir.
-- README güncellenir.
+- ✅ Groq serî kuyruğu + 429 retry (`lib/groq.ts`), n8n workflow JSON'ları repoda.
+- ⏳ Kalan: uçtan uca canlı deneme (SearXNG + Gmail API + Discord intent açıldıktan sonra), README son hâli.
 
 ---
 
@@ -231,10 +229,12 @@ Bildirimler yalnızca `sentiment = POSITIVE` yanıtlar için gider.
 | `APP_URL` | Sabit: `http://localhost:3000` | ✅ |
 | `APP_INTERNAL_API_KEY` | Kendin üret (rastgele 32 karakter) | ✅ |
 | `GROQ_API_KEY` | console.groq.com → API Keys | ✅ |
-| `GROQ_MODEL` | Groq model listesinden (varsayılan: `llama-3.3-70b-versatile`) | ✅ |
+| `PUBLIC_URL` | Dışarıya açık adres (`cloudflared tunnel --url http://localhost:3000`). Boşsa açılma takibi ve mail görselleri çalışmaz | ➖ |
+| `GROQ_MODEL` | Groq model listesinden (varsayılan: `openai/gpt-oss-120b`) | ✅ |
 | `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | Google Cloud Console → OAuth (Desktop app) | ✅ |
 | `GMAIL_REFRESH_TOKEN` | `node scripts/gmail-auth.js` üretir | ✅ |
 | `GMAIL_USER` | Gönderim yapılacak Gmail adresi | ✅ |
+| `SENDER_NAME` / `SENDER_TITLE` / `SENDER_ADDRESS` | Mail imzasında görünen ad, unvan, iletişim | ➖ |
 | `N8N_BASE_URL` | Sabit: `http://localhost:5678` | ✅ |
 | `N8N_API_KEY` | n8n → Settings → API → Create API key | ✅ |
 | `N8N_WEBHOOK_DISCOVER_URL` | Faz 3'te workflow kurulunca oluşur | ✅ |
@@ -254,8 +254,10 @@ npm run dev            # Next.js geliştirme sunucusu (:3000)
 npm run bot            # Discord botu
 npm run db:migrate     # Prisma migration
 npm run db:studio      # Veritabanını tarayıcıda görüntüle
-npm run n8n:sync       # n8n/workflows içindeki JSON'ları n8n'e yükle
+npm run n8n:sync       # n8n/workflows içindeki JSON'ları n8n'e yükle (list/backup/purge/push/reset)
+npm run workflows      # workflow JSON'larını üret (elle düzenlemeyin)
 npm run gmail:auth     # Gmail refresh token üret
+npm run launcher       # masaüstüne MailBot.bat kısayolu yaz
 docker compose -f infra/docker-compose.yml up -d   # SearXNG
 ```
 

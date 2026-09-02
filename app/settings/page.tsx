@@ -19,6 +19,19 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: 'Gönderen kimliği',
+    note: 'Mail imzasında ve açılma takibinde kullanılır.',
+    keys: [
+      { key: 'SENDER_NAME', where: 'Mail imzasındaki ad soyad' },
+      { key: 'SENDER_TITLE', where: 'Unvan (örn. Kurucu)' },
+      { key: 'SENDER_ADDRESS', where: 'İmzada görünen iletişim adresi' },
+      {
+        key: 'PUBLIC_URL',
+        where: 'Dışarıya açık adres — boşsa açılma takibi ve görsel çalışmaz (cloudflared tunnel)',
+      },
+    ],
+  },
+  {
     title: 'Groq AI',
     note: 'Mail iyileştirme ve yanıt analizi için gerekli.',
     keys: [{ key: 'GROQ_API_KEY', where: 'console.groq.com → API Keys' }],
