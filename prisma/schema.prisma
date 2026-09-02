@@ -105,11 +105,15 @@ model Reply {
   /// Discord'a bildirim gonderildiyse dolu (sadece POSITIVE icin)
   discordNotifiedAt DateTime?
   answeredAt        DateTime?
+  /// Kullanici listeden kaldirdiysa dolu. Kayit silinmez: gmailMessageId
+  /// durdugu icin gelen kutusu senkronizasyonu ayni yaniti tekrar acmaz.
+  deletedAt         DateTime?
   createdAt         DateTime  @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([sentiment])
+  @@index([deletedAt])
 }
 
 /// Bir discovery calistirmasi (prompt -> sirket listesi).

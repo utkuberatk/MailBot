@@ -26,6 +26,7 @@ export async function GET(request: Request) {
         company: { select: { id: true, name: true, domain: true } },
         campaign: { select: { id: true, name: true } },
         replies: {
+          where: { deletedAt: null },
           select: { id: true, sentiment: true, summary: true, receivedAt: true },
           orderBy: { receivedAt: 'desc' },
         },

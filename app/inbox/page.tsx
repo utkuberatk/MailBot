@@ -51,6 +51,7 @@ export default function InboxPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -72,6 +73,20 @@ export default function InboxPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  /** O an listelenen yanitlarin hepsini kaldirir (filtreye saygi duyar). */
+  async function clearListed() {
+    const response = await fetch('/api/replies', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: replies.map((reply) => reply.id) }),
+    })
+
+    const data = await response.json()
+    setClearing(false)
+    setNotice(response.ok ? `${data.deleted} yanıt listeden kaldırıldı.` : 'Yanıtlar silinemedi.')
+    load()
+  }
 
   async function sync() {
     setSyncing(true)
@@ -132,14 +147,45 @@ export default function InboxPage() {
         </div>
 
         {tab === 'replies' ? (
-          <label className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
-            <input
-              type="checkbox"
-              checked={onlyPositive}
-              onChange={(e) => setOnlyPositive(e.target.checked)}
-            />
-            Sadece OLUMLU
-          </label>
+          <>
+            <label className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
+              <input
+                type="checkbox"
+                checked={onlyPositive}
+                onChange={(e) => setOnlyPositive(e.target.checked)}
+              />
+              Sadece OLUMLU
+            </label>
+
+            {replies.length > 0 ? (
+              clearing ? (
+                <span className="flex items-center gap-2 text-sm">
+                  <span className="text-[var(--color-muted)]">
+                    Listedeki {replies.length} yanıt silinsin mi?
+                  </span>
+                  <button
+                    onClick={clearListed}
+                    className="rounded-lg bg-[var(--color-warn)] px-3 py-1 text-sm text-white"
+                  >
+                    Evet, sil
+                  </button>
+                  <button
+                    onClick={() => setClearing(false)}
+                    className="rounded-lg border border-[var(--color-line)] px-3 py-1 text-sm"
+                  >
+                    Vazgeç
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setClearing(true)}
+                  className="ml-auto text-sm text-[var(--color-muted)] hover:text-[var(--color-warn)]"
+                >
+                  Listeyi temizle
+                </button>
+              )
+            ) : null}
+          </>
         ) : null}
       </div>
 
@@ -158,7 +204,15 @@ export default function InboxPage() {
         ) : (
           <div className="grid gap-3">
             {replies.map((reply) => (
-              <ReplyCard key={reply.id} reply={reply} onAnswered={load} />
+              <ReplyCard
+                key={reply.id}
+                reply={reply}
+                onAnswered={load}
+                onDeleted={() => {
+                  setNotice('Yanıt listeden kaldırıldı.')
+                  load()
+                }}
+              />
             ))}
           </div>
         )
@@ -283,14 +337,39 @@ function TabButton({
   )
 }
 
-function ReplyCard({ reply, onAnswered }: { reply: Reply; onAnswered: () => void }) {
+function ReplyCard({
+  reply,
+  onAnswered,
+  onDeleted,
+}: {
+  reply: Reply
+  onAnswered: () => void
+  onDeleted: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const tone =
     reply.sentiment === 'POSITIVE' ? 'ok' : reply.sentiment === 'NEGATIVE' ? 'warn' : 'muted'
+
+  async function remove() {
+    setDeleting(true)
+
+    const response = await fetch('/api/replies', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [reply.id] }),
+    })
+
+    setDeleting(false)
+    setConfirming(false)
+    if (response.ok) onDeleted()
+    else setResult('Yanıt silinemedi.')
+  }
 
   async function answer() {
     if (!text.trim()) return
@@ -346,12 +425,41 @@ function ReplyCard({ reply, onAnswered }: { reply: Reply; onAnswered: () => void
             <span className="font-mono">#{reply.message.id}</span>
           </div>
         </div>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm"
-        >
-          {open ? 'Kapat' : 'Yanıtla'}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm"
+          >
+            {open ? 'Kapat' : 'Yanıtla'}
+          </button>
+
+          {/* Geri alinamayan islem: tek tikla degil, onayla silinir. */}
+          {confirming ? (
+            <>
+              <button
+                onClick={remove}
+                disabled={deleting}
+                className="rounded-lg bg-[var(--color-warn)] px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                {deleting ? 'Siliniyor…' : 'Evet, sil'}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                className="rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm"
+              >
+                Vazgeç
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              title="Bu yanıtı listeden kaldır"
+              className="rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-sm text-[var(--color-muted)] hover:border-[var(--color-warn)] hover:text-[var(--color-warn)]"
+            >
+              Sil
+            </button>
+          )}
+        </div>
       </div>
 
       {reply.summary ? <p className="mt-3 text-sm">{reply.summary}</p> : null}

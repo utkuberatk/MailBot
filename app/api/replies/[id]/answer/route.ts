@@ -23,8 +23,9 @@ export async function POST(
   const text = body.text?.trim()
   if (!text) return Response.json({ error: 'Yanıt metni boş.' }, { status: 400 })
 
-  const reply = await db.reply.findUnique({
-    where: { id: replyId },
+  // Listeden kaldirilmis yanit cevaplanmaz — kullanici onu artik gormuyor.
+  const reply = await db.reply.findFirst({
+    where: { id: replyId, deletedAt: null },
     include: { message: { include: { company: true } } },
   })
   if (!reply) return Response.json({ error: 'Yanıt bulunamadı.' }, { status: 404 })
