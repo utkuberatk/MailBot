@@ -1,0 +1,35 @@
+# SearXNG ayarlari — MailBot discovery hatti icin.
+# Kritik nokta: "json" formati acik olmali, yoksa n8n sonuclari okuyamaz.
+
+use_default_settings: true
+
+general:
+  instance_name: "MailBot Search"
+  # Sadece local kullanim; istatistik/donate sayfalarina gerek yok.
+  donation_url: false
+  contact_url: false
+
+server:
+  # docker-compose.yml icindeki SEARXNG_SECRET ile ayni olmali.
+  secret_key: "mailbot-local-secret-degistir"
+  # Local ve tek kullanicili oldugu icin hiz limiti kapali.
+  limiter: false
+  image_proxy: false
+  method: "GET"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "tr"
+  formats:
+    - html
+    - json
+
+ui:
+  default_locale: "tr"
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 20.0
+  pool_connections: 100
+  pool_maxsize: 20

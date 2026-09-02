@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# env & secrets
+.env
+.env.local
+.env*.local
+token.json
+credentials.json
+
+# database
+*.db
+*.db-journal
+prisma/dev.db
+prisma/migrations/dev.db*
+
+# next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# media (videolar ve thumbnail'lar repoya girmez)
+media/*
+!media/.gitkeep
+
+# n8n yedekleri dışındaki geçici çıktılar
+n8n/workflows/_tmp/
+
+# logs
+*.log
+npm-debug.log*
+logs/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,136 @@
+// MailBot veri modeli — SQLite + Prisma
+// Migration Faz 1'de calistirilir: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Bulunan veya elle eklenen sirket.
+model Company {
+  id          Int       @id @default(autoincrement())
+  name        String
+  website     String?
+  domain      String?   @unique
+  email       String?
+  phone       String?
+  city        String?
+  sector      String?
+  /// "n8n" | "manual" | "csv"
+  source      String    @default("manual")
+  /// Discovery sirasinda siteden cikarilan ham metin ozeti
+  rawSnippet  String?
+  /// Groq siniflandirma guven skoru (0-1)
+  score       Float?
+  isEcommerce Boolean   @default(true)
+  /// Bounce/hata alan adresler false yapilir, bir daha mail gonderilmez.
+  isActive    Boolean   @default(true)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  discoveryRunId Int?
+  discoveryRun   DiscoveryRun? @relation(fields: [discoveryRunId], references: [id])
+  messages       Message[]
+
+  @@index([city])
+  @@index([sector])
+  @@index([isActive])
+}
+
+/// Mail sablonu + video bilgisi.
+model Campaign {
+  id             Int       @id @default(autoincrement())
+  name           String
+  subject        String
+  /// {{company}} gibi degiskenler iceren govde
+  bodyTemplate   String
+  /// AI ile iyilestirilmeden onceki orijinal taslak
+  originalDraft  String?
+  videoUrl       String?
+  videoThumbPath String?
+  spamScore      Float?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  messages Message[]
+}
+
+/// Tek bir sirkete gonderilen tek bir mail.
+model Message {
+  id             Int       @id @default(autoincrement())
+  companyId      Int
+  campaignId     Int?
+  toEmail        String
+  subject        String
+  bodyHtml       String
+  /// QUEUED | SENT | FAILED | BOUNCED
+  status         String    @default("QUEUED")
+  /// Tracking pixel URL'inde kullanilan uuid
+  trackingId     String    @unique
+  gmailMessageId String?
+  gmailThreadId  String?
+  sentAt         DateTime?
+  /// null ise UI'da kirmizi, dolu ise yesil gosterilir.
+  openedAt       DateTime?
+  openCount      Int       @default(0)
+  error          String?
+  createdAt      DateTime  @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  replies  Reply[]
+
+  @@index([status])
+  @@index([gmailThreadId])
+}
+
+/// Gelen yanit ve AI analizi.
+model Reply {
+  id                Int       @id @default(autoincrement())
+  messageId         Int
+  fromEmail         String
+  bodyText          String
+  gmailMessageId    String?   @unique
+  receivedAt        DateTime
+  /// POSITIVE | NEUTRAL | NEGATIVE
+  sentiment         String    @default("NEUTRAL")
+  sentimentScore    Float?
+  summary           String?
+  /// Discord'a bildirim gonderildiyse dolu (sadece POSITIVE icin)
+  discordNotifiedAt DateTime?
+  answeredAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([sentiment])
+}
+
+/// Bir discovery calistirmasi (prompt -> sirket listesi).
+model DiscoveryRun {
+  id          Int       @id @default(autoincrement())
+  prompt      String
+  /// RUNNING | DONE | FAILED
+  status      String    @default("RUNNING")
+  source      String    @default("searxng")
+  resultCount Int       @default(0)
+  /// "ui" | "discord"
+  triggeredBy String    @default("ui")
+  error       String?
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  companies Company[]
+}
+
+/// Basit key/value ayarlar (gunluk gonderim sayaci, warm-up asamasi vb.)
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,50 @@
+# MailBot yerel altyapi servisleri
+# Calistirma:  docker compose -f infra/docker-compose.yml up -d
+# Durdurma:    docker compose -f infra/docker-compose.yml down
+#
+# n8n zaten localhost:5678'de calistigi icin buraya dahil edilmedi.
+# n8n'i de bu compose ile yonetmek isterseniz dosyanin altindaki
+# yorumlu blogu acabilirsiniz.
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    container_name: mailbot-searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: "http://localhost:8080/"
+      # searxng/settings.yml icindeki secret_key ile ayni olmali
+      SEARXNG_SECRET: "mailbot-local-secret-degistir"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "1"
+
+# --- n8n'i de buradan yonetmek isterseniz -----------------------------
+#  n8n:
+#    image: docker.n8n.io/n8nio/n8n:latest
+#    container_name: mailbot-n8n
+#    restart: unless-stopped
+#    ports:
+#      - "5678:5678"
+#    environment:
+#      N8N_HOST: "localhost"
+#      N8N_PORT: "5678"
+#      WEBHOOK_URL: "http://localhost:5678/"
+#      GENERIC_TIMEZONE: "Europe/Istanbul"
+#    volumes:
+#      - n8n_data:/home/node/.n8n
+#
+# volumes:
+#   n8n_data:
