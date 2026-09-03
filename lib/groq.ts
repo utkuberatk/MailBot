@@ -139,6 +139,8 @@ export type ImprovedEmail = {
   subject: string
   body: string
   spamScore: number
+  /** Gmail'in Tanitim (Promotions) sekmesine dusme riski — spam riskinden ayri. */
+  promoRisk: number
   warnings: string[]
 }
 
@@ -153,14 +155,26 @@ export async function improveEmail(input: {
       role: 'system',
       content:
         'Turkce is maillerini duzenleyen bir editorsun. Sadece JSON dondur: ' +
-        '{"subject": "...", "body": "...", "spamScore": 0-1, "warnings": ["..."]}.\n' +
+        '{"subject": "...", "body": "...", "spamScore": 0-1, "promoRisk": 0-1, "warnings": ["..."]}.\n' +
+        'AMAC: mail, Gmail tarafindan TOPLU PAZARLAMA MAILI degil, bir insanin elle ' +
+        'yazdigi kisisel mail olarak okunmali. Tanitim (Promotions) sekmesine duserse ' +
+        'alicinin telefonuna bildirim gitmez ve mail genelde hic gorulmez.\n' +
         'Kurallar:\n' +
         '- Kullanicinin niyetini, teklifini ve tonunu KORU. Yeni iddia, rakam veya vaat EKLEME.\n' +
-        '- Sadece dili, akisi ve nezaketi duzelt. Kisa ve net tut (en fazla 150 kelime).\n' +
-        '- Sirket adini dogal bicimde metne yerlestir.\n' +
-        '- Abartili pazarlama dili, cok sayida unlem ve buyuk harf bloklari kullanma.\n' +
-        '- spamScore: mailin spam olarak algilanma riski (0 dusuk, 1 yuksek).\n' +
-        '- warnings: spam riskini artiran somut ifadeler (yoksa bos dizi).',
+        '- Sadece dili, akisi ve nezaketi duzelt. En fazla 120 kelime, kisa paragraflar.\n' +
+        '- Sirket adini dogal bicimde metne yerlestir; neden ONLARA yazdigin anlasilsin.\n' +
+        '- Pazarlama dili YASAK: "kampanya", "firsat", "ucretsiz", "hemen", "ozel indirim", ' +
+        '"tiklayin", "son sans" gibi ifadeler ve harekete gecirici dugme dili kullanma.\n' +
+        '- Unlem isareti kullanma, BUYUK HARF blogu yazma, emoji koyma.\n' +
+        '- Metin BASIT BIR SORUYLA bitsin. Yanit almak, Gmail\'in o kisiyi kalici olarak ' +
+        'Birincil sekmeye tasimasini saglayan en guclu sinyaldir.\n' +
+        '- Konu: en fazla 6-7 kelime, emoji yok, unlem yok, buyuk harf blogu yok, ' +
+        'normal cumle duzeni. Reklam basligi gibi degil, is maili gibi dursun.\n' +
+        '- Maile link YAZMA; adresler gonderim katmaninda yonetiliyor.\n' +
+        '- spamScore: spam klasorune dusme riski (0 dusuk, 1 yuksek).\n' +
+        '- promoRisk: Tanitim sekmesine dusme riski (pazarlama kelimeleri, uzunluk, ' +
+        'link sayisi, reklam tonu). 0 dusuk, 1 yuksek.\n' +
+        '- warnings: iki riski de artiran SOMUT ifadeler ve gerekcesi (yoksa bos dizi).',
     },
     {
       role: 'user',
@@ -177,6 +191,7 @@ export async function improveEmail(input: {
     subject: typeof parsed.subject === 'string' ? parsed.subject : input.subject,
     body: typeof parsed.body === 'string' ? parsed.body : input.draft,
     spamScore: typeof parsed.spamScore === 'number' ? parsed.spamScore : 0,
+    promoRisk: typeof parsed.promoRisk === 'number' ? parsed.promoRisk : 0,
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
   }
 }
@@ -231,6 +246,8 @@ export async function polishReply(input: {
         've yonunu aynen koru.\n' +
         '- Yeni bilgi, tarih, saat, fiyat veya taahhut EKLEME; olanlari da CIKARMA.\n' +
         '- Kisa tut, samimi ve profesyonel ol; yapay zeka yazmis gibi durmasin.\n' +
+        '- `{{video}}` yer tutucusunu gorursen AYNEN koru, silme ve degistirme; ' +
+        'gonderim katmani onu gercek adresle degistiriyor.\n' +
         '- Imza satirini sen ekleme.',
     },
     {

@@ -108,7 +108,27 @@ export const env = {
    * Bos veya gecersizse takip kapanir: mailde piksel ve gorsel olmaz,
    * listeden cikis mailto: ile yapilir. Sistem calismaya devam eder.
    */
+  /**
+   * Gonderim bicimi.
+   *
+   * `personal` (varsayilan): duz metin, HTML yok, gorsel yok, piksel yok,
+   * `List-Unsubscribe` basligi yok, maile link konmaz. Gmail'in Tanitim
+   * sekmesine iten sinyaller boylece ortadan kalkar; mail Birincil sekmeye
+   * duser ve alicinin telefonuna bildirim gider (Gmail varsayilan olarak
+   * yalnizca Birincil icin bildirim uretir).
+   *
+   * `tracked`: HTML govde + takip pikseli + sarilmis linkler (Faz 10).
+   * Acilma takibi calisir ama Tanitim sekmesine dusme riski belirgin artar.
+   */
+  mailStyle: (): 'personal' | 'tracked' =>
+    optionalEnv('MAIL_STYLE').trim() === 'tracked' ? 'tracked' : 'personal',
+  personalMode: () => env.mailStyle() === 'personal',
+
   mailTrackingUrl: () => {
+    // Kisisel modda takip adresi hic uretilmez: piksel, sarilmis link ve
+    // https cikis linki tek noktadan kapanir.
+    if (env.personalMode()) return ''
+
     const value = optionalEnv('MAIL_TRACKING_URL').trim().replace(/\/$/, '')
     if (!value) return ''
     if (isTrustedMailUrl(value)) return value

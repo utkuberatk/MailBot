@@ -46,6 +46,12 @@ export function isOptOutRequest(text: string): boolean {
     /(mail|e-?posta|mesaj)\s+g[oö]nderme/,
     /rahatsiz\s+etmey/,
     /\bspam\b/,
+    // Kisisel moddaki cikis cumlesinin ("ilgilenmiyorum yazin") karsiliklari.
+    /ilgilenmiyor/,
+    /ilgilenmedik/,
+    /ilgimizi\s+cekmi/,
+    /yazmay(in|iniz)/,
+    /gonderme(yin|yiniz)/,
   ]
 
   return patterns.some((pattern) => pattern.test(normalized))

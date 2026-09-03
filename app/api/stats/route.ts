@@ -27,6 +27,10 @@ export async function GET() {
     queued,
     failed,
     quota,
-    tracking: { enabled: env.trackingEnabled(), devMode: env.trackingDevMode() },
+    tracking: {
+      enabled: env.trackingEnabled(),
+      devMode: env.trackingDevMode(),
+      style: env.mailStyle(),
+    },
   })
 }

@@ -98,6 +98,19 @@ export async function getQuota(): Promise<Quota> {
 }
 
 /** Sablondaki degiskenleri sirket bilgileriyle doldurur. */
+/**
+ * Yanit metnindeki `{{video}}` yer tutucusunu kampanyanin video adresiyle degistirir.
+ *
+ * Kisisel modda ilk maile link konmadigi icin video, yanit veren sirkete gonderilir
+ * (`/inbox` yanit kutusu ve `!mailcevap` ayni ucu kullanir).
+ */
+export function renderVideoPlaceholder(text: string, videoUrl?: string | null): string {
+  return text.replace(
+    /\{\{\s*video\s*\}\}/gi,
+    videoUrl?.trim() || '(bu kampanyada video adresi tanımlı değil)',
+  )
+}
+
 export function renderTemplate(
   template: string,
   company: { name: string; city?: string | null; sector?: string | null; domain?: string | null },
@@ -139,17 +152,36 @@ export type MailContent = {
   trackingId: string
 }
 
-/** Cikis talebini yanit olarak isteyen cumle — takip kapaliyken kullanilir. */
+/** Cikis talebini yanit olarak isteyen cumle — takipli modda kullanilir. */
 const REPLY_TO_UNSUBSCRIBE =
   'Bu mailleri almak istemiyorsanız bu mesajı yanıtlayıp "çıkar" yazmanız yeterli.'
 
 /**
+ * Kisisel moddaki cikis cumlesi.
+ *
+ * Reddetme hakkini sunar (6563 sayili Kanun tacire onceden izin sarti aramaz
+ * ama reddetme imkani zorunludur) ama "listeden cikin / abonelik" toplu-mail
+ * dilini icermez — Gmail'in Tanitim siniflandiricisi bu kaliplari okur.
+ * Gelen yanit `lib/inbox.ts` -> isOptOutRequest() ile yakalanir.
+ */
+const PERSONAL_OPT_OUT =
+  'İlginizi çekmiyorsa "ilgilenmiyorum" yazıp yanıtlamanız yeterli, bir daha yazmam.'
+
+/**
  * `List-Unsubscribe` baslik degeri.
  *
- * Kendi alan adimiz yoksa mailto: bicimi kullanilir — Gmail bunu destekler,
- * hicbir altyapi gerektirmez ve itibarsiz bir alan adi maile girmez.
+ * Kisisel modda `null` doner: bu baslik Gmail icin en guclu "bu toplu mail"
+ * sinyalidir ve maili dogrudan Tanitim sekmesine iter. Cikis yolu o modda
+ * govdedeki dogal cumleyle sunulur.
+ *
+ * Takipli modda kendi alan adimiz yoksa mailto: bicimi kullanilir — Gmail
+ * bunu destekler ve itibarsiz bir alan adi maile girmez.
  */
-export function listUnsubscribeHeader(trackingId: string): { value: string; oneClick: boolean } {
+export function listUnsubscribeHeader(
+  trackingId: string,
+): { value: string; oneClick: boolean } | null {
+  if (env.personalMode()) return null
+
   const trackingUrl = env.mailTrackingUrl()
 
   if (trackingUrl) {
@@ -219,18 +251,30 @@ ${unsubscribe}
 </div></body></html>`
 }
 
-/** HTML'siz istemciler icin duz metin surumu. */
+/**
+ * Duz metin govde.
+ *
+ * Kisisel modda mailin TAMAMI budur (HTML parca hic uretilmez). O modda maile
+ * hicbir link konmaz — linksiz duz metin, Birincil sekmeye dusmenin en guclu
+ * bicimidir; video adresi yanit verenlere `{{video}}` ile gonderilir.
+ */
 export function buildText(content: MailContent): string {
   const trackingUrl = env.mailTrackingUrl()
+  const personal = env.personalMode()
   const sender = env.sender()
   const parts = [content.body.trim()]
 
-  if (content.videoUrl) parts.push(`Video: ${trackedLink(content.trackingId, content.videoUrl)}`)
+  if (content.videoUrl && !personal) {
+    parts.push(`Video: ${trackedLink(content.trackingId, content.videoUrl)}`)
+  }
+
   parts.push([sender.name, sender.title, sender.address].filter(Boolean).join('\n'))
   parts.push(
-    trackingUrl
-      ? `Listeden çıkmak için: ${trackingUrl}/api/unsubscribe/${content.trackingId}`
-      : REPLY_TO_UNSUBSCRIBE,
+    personal
+      ? PERSONAL_OPT_OUT
+      : trackingUrl
+        ? `Listeden çıkmak için: ${trackingUrl}/api/unsubscribe/${content.trackingId}`
+        : REPLY_TO_UNSUBSCRIBE,
   )
 
   return parts.join('\n\n')
@@ -297,7 +341,8 @@ export async function queueCampaign(
         campaignId,
         toEmail: company.email,
         subject: renderTemplate(campaign.subject, company),
-        bodyHtml: buildHtml(content),
+        // Kisisel modda HTML uretilmez; kolon gercekte ne gonderildiyse onu tutar.
+        bodyHtml: env.personalMode() ? buildText(content) : buildHtml(content),
         trackingId,
         status: 'QUEUED',
       },
@@ -345,11 +390,15 @@ async function sendOne(message: {
   }
 
   const unsubscribe = listUnsubscribeHeader(message.trackingId)
+  const personal = env.personalMode()
 
-  // bodyHtml kuyruga alma aninda donar. Takip sonradan acildiysa kuyrukta
-  // bekleyen mailler pikselsiz giderdi — bu durumda HTML yeniden uretilir.
-  const html =
-    env.trackingEnabled() && content.body && !message.bodyHtml.includes('/api/track/')
+  // bodyHtml kuyruga alma aninda donar; mod veya takip sonradan degisirse
+  // kuyrukta bekleyen mailler eski bicimde giderdi. Kampanya ve sirket hâlâ
+  // duruyorsa govde gonderim aninda yeniden uretilir.
+  const text = content.body ? buildText(content) : message.bodyHtml
+  const html = personal
+    ? undefined
+    : content.body && !message.bodyHtml.includes('/api/track/') && env.trackingEnabled()
       ? buildHtml(content)
       : message.bodyHtml
 
@@ -358,9 +407,9 @@ async function sendOne(message: {
       to: message.toEmail,
       subject: message.subject,
       html,
-      text: buildText(content),
-      listUnsubscribe: unsubscribe.value,
-      listUnsubscribeOneClick: unsubscribe.oneClick,
+      text,
+      listUnsubscribe: unsubscribe?.value,
+      listUnsubscribeOneClick: unsubscribe?.oneClick,
     })
 
     await db.message.update({
@@ -370,7 +419,7 @@ async function sendOne(message: {
         sentAt: new Date(),
         gmailMessageId: sent.id,
         gmailThreadId: sent.threadId,
-        bodyHtml: html,
+        bodyHtml: personal ? text : (html ?? message.bodyHtml),
         error: null,
       },
     })

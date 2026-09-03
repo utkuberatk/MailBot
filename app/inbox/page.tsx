@@ -48,7 +48,7 @@ type Message = {
 
 type Stats = { byStatus: Record<string, number>; opened: number; clicked: number }
 
-type Tracking = { enabled: boolean; devMode: boolean }
+type Tracking = { enabled: boolean; devMode: boolean; style: 'personal' | 'tracked' }
 
 const SENTIMENT_LABELS: Record<string, string> = {
   POSITIVE: 'Olumlu',
@@ -90,6 +90,9 @@ export default function InboxPage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Kisisel modda piksel yok: "Acilma" sutunu her satirda "acilmadi" yazardi.
+  const showOpens = tracking?.style !== 'personal'
 
   /** O an listelenen yanitlarin hepsini kaldirir (filtreye saygi duyar). */
   async function clearListed() {
@@ -147,14 +150,27 @@ export default function InboxPage() {
       {stats ? (
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <Pill label="Gönderildi" value={stats.byStatus.SENT ?? 0} />
-          <Pill label="Açıldı" value={stats.opened} tone="ok" />
-          <Pill label="Tıklandı" value={stats.clicked} tone="ok" />
+          {tracking?.style === 'personal' ? null : (
+            <>
+              <Pill label="Açıldı" value={stats.opened} tone="ok" />
+              <Pill label="Tıklandı" value={stats.clicked} tone="ok" />
+            </>
+          )}
           <Pill label="Kuyrukta" value={stats.byStatus.QUEUED ?? 0} />
           <Pill label="Hatalı" value={stats.byStatus.FAILED ?? 0} tone="warn" />
         </div>
       ) : null}
 
-      {tab === 'sent' && tracking && !tracking.enabled ? (
+      {tab === 'sent' && tracking?.style === 'personal' ? (
+        <div className="mb-4 rounded-xl border border-[var(--color-line)] px-4 py-3 text-sm text-[var(--color-muted)]">
+          <strong className="text-[var(--color-ink)]">Kişisel mod.</strong> Mailler düz metin
+          gönderiliyor; takip pikseli yok, bu yüzden açılma bilgisi de yok. Bu bilinçli:
+          piksel, Gmail’in maili <strong>Tanıtım</strong> sekmesine atmasına yol açan
+          sinyallerden biri ve o sekmeye düşen mail alıcının telefonunda bildirim üretmiyor.
+          İlginin tek ölçüsü <strong>gelen yanıtlar</strong>. Takibi geri açmak için{' '}
+          <code>MAIL_STYLE=&quot;tracked&quot;</code>.
+        </div>
+      ) : tab === 'sent' && tracking && !tracking.enabled ? (
         <div className="mb-4 rounded-xl bg-[var(--color-warn-soft)] px-4 py-3 text-sm text-[var(--color-warn)]">
           <strong>Açılma takibi kapalı.</strong> Aşağıdaki maillerin hepsi &quot;açılmadı&quot;
           görünür — bu bir arıza değil. Takip pikseli yalnızca kendi alan adınızdan servis
@@ -264,7 +280,7 @@ export default function InboxPage() {
                 <th className="px-4 py-3 font-medium">Şirket</th>
                 <th className="px-4 py-3 font-medium">Konu</th>
                 <th className="px-4 py-3 font-medium">Gönderim</th>
-                <th className="px-4 py-3 font-medium">Açılma</th>
+                {showOpens ? <th className="px-4 py-3 font-medium">Açılma</th> : null}
                 <th className="px-4 py-3 font-medium">Yanıt</th>
               </tr>
             </thead>
@@ -288,17 +304,21 @@ export default function InboxPage() {
                     <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
                       {message.sentAt ? new Date(message.sentAt).toLocaleString('tr-TR') : '—'}
                     </td>
-                    <td className="px-4 py-3 text-xs">
-                      {message.openedAt ? (
-                        <span className="text-[var(--color-ok)]">
-                          {new Date(message.lastOpenedAt ?? message.openedAt).toLocaleString('tr-TR')}
-                          {message.openCount > 1 ? ` (${message.openCount}×)` : ''}
-                          {message.clickCount > 0 ? ' 🔗' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-[var(--color-warn)]">açılmadı</span>
-                      )}
-                    </td>
+                    {showOpens ? (
+                      <td className="px-4 py-3 text-xs">
+                        {message.openedAt ? (
+                          <span className="text-[var(--color-ok)]">
+                            {new Date(message.lastOpenedAt ?? message.openedAt).toLocaleString(
+                              'tr-TR',
+                            )}
+                            {message.openCount > 1 ? ` (${message.openCount}×)` : ''}
+                            {message.clickCount > 0 ? ' 🔗' : ''}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--color-warn)]">açılmadı</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3 text-xs">
                       {message.replies.length > 0
                         ? SENTIMENT_LABELS[message.replies[0].sentiment] ??
@@ -309,7 +329,7 @@ export default function InboxPage() {
 
                   {expanded === message.id ? (
                     <tr className="border-b border-[var(--color-line)] last:border-0">
-                      <td colSpan={6} className="bg-[var(--color-canvas)] px-4 py-3">
+                      <td colSpan={showOpens ? 6 : 5} className="bg-[var(--color-canvas)] px-4 py-3">
                         <EventList message={message} />
                       </td>
                     </tr>

@@ -71,7 +71,11 @@ export async function GET(request: Request) {
     },
     quota,
     worker: workerState(),
-    tracking: { enabled: env.trackingEnabled(), devMode: env.trackingDevMode() },
+    tracking: {
+      enabled: env.trackingEnabled(),
+      devMode: env.trackingDevMode(),
+      style: env.mailStyle(),
+    },
   })
 }
 

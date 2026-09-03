@@ -90,7 +90,13 @@ export function fromBase64Url(input: string): string {
 export type OutgoingMail = {
   to: string
   subject: string
-  html: string
+  /**
+   * HTML govde. Verilmezse mesaj TEK PARCALI `text/plain` olarak kurulur.
+   *
+   * Duz metin, Gmail icin "bir insan elle yazmis" sinyalinin en guclusudur;
+   * multipart/alternative + inline CSS'li HTML ise Tanitim sekmesine iter.
+   */
+  html?: string
   text: string
   /** Yanit gonderirken: yanitlanacak mesajin Message-ID basligi. */
   inReplyTo?: string
@@ -101,24 +107,33 @@ export type OutgoingMail = {
   listUnsubscribeOneClick?: boolean
 }
 
-/** text/plain + text/html alternatifi iceren MIME mesaji kurar. */
+const base64Body = (value: string) =>
+  Buffer.from(value, 'utf8').toString('base64').replace(/(.{76})/g, '$1\n')
+
+/**
+ * MIME mesaji kurar.
+ *
+ * HTML verilmisse `text/plain` + `text/html` alternatifi, verilmemisse tek
+ * parcali `text/plain`. Ikincisi kisisel modun tamami: Gmail'in Tanitim
+ * siniflandiricisi icin en zayif "toplu mail" izini birakan bicim budur.
+ */
 export function buildMime(mail: OutgoingMail): string {
   const sender = env.sender()
-  const boundary = `mb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 
   const headers = [
     `From: ${encodeAddress(sender.name, env.gmailUser())}`,
     `To: ${mail.to}`,
     `Subject: ${encodeHeader(mail.subject)}`,
     'MIME-Version: 1.0',
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ]
 
   if (mail.inReplyTo) {
     headers.push(`In-Reply-To: ${mail.inReplyTo}`, `References: ${mail.inReplyTo}`)
   }
 
-  // Spam filtreleri icin: cikis yolu. Gmail bu basligi arayuzde gosterir.
+  // Cikis yolu basligi. Gmail bunu arayuzde gosterir ama ayni zamanda en guclu
+  // "bu toplu mail" sinyalidir; kisisel modda hic gonderilmez (cikis talebi
+  // govdedeki dogal cumleyle ve lib/inbox.ts -> isOptOutRequest ile isler).
   if (mail.listUnsubscribe) {
     headers.push(`List-Unsubscribe: ${mail.listUnsubscribe}`)
     if (mail.listUnsubscribeOneClick) {
@@ -126,17 +141,25 @@ export function buildMime(mail: OutgoingMail): string {
     }
   }
 
+  if (!mail.html) {
+    headers.push('Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64')
+    return [...headers, '', base64Body(mail.text), ''].join('\r\n')
+  }
+
+  const boundary = `mb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`)
+
   const body = [
     `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(mail.text, 'utf8').toString('base64').replace(/(.{76})/g, '$1\n'),
+    base64Body(mail.text),
     `--${boundary}`,
     'Content-Type: text/html; charset="UTF-8"',
     'Content-Transfer-Encoding: base64',
     '',
-    Buffer.from(mail.html, 'utf8').toString('base64').replace(/(.{76})/g, '$1\n'),
+    base64Body(mail.html),
     `--${boundary}--`,
     '',
   ]

@@ -21,9 +21,15 @@ type Quota = {
   stage: string
 }
 
-type Tracking = { enabled: boolean; devMode?: boolean }
+type Tracking = { enabled: boolean; devMode?: boolean; style?: 'personal' | 'tracked' }
 
-type Improved = { subject: string; body: string; spamScore: number; warnings: string[] }
+type Improved = {
+  subject: string
+  body: string
+  spamScore: number
+  promoRisk: number
+  warnings: string[]
+}
 
 const PLACEHOLDER = `Merhaba {{company}} ekibi,
 
@@ -245,12 +251,37 @@ function Compose() {
         </div>
       ) : null}
 
-      {tracking && !tracking.enabled ? (
+      {tracking?.style === 'personal' ? (
+        <div className="mb-4 rounded-xl border border-[var(--color-line)] px-4 py-3 text-sm text-[var(--color-muted)]">
+          <strong className="text-[var(--color-ink)]">Kişisel mod açık.</strong> Mailler{' '}
+          <strong>düz metin</strong> gider: HTML yok, görsel yok, takip pikseli yok, maile link
+          konmaz ve <code className="font-mono text-xs">List-Unsubscribe</code> başlığı
+          gönderilmez. Bunların hepsi Gmail’in maili <strong>Tanıtım</strong> sekmesine atmasına
+          yol açan sinyaller; kaldırıldığında mail <strong>Birincil</strong> sekmeye düşer ve
+          alıcının telefonuna <strong>bildirim gider</strong> (Gmail varsayılan olarak yalnızca
+          Birincil için bildirim üretir).
+          <br />
+          Listeden çıkma, metnin sonundaki doğal cümleyle sunulur; “ilgilenmiyorum” yanıtı gelen
+          şirket otomatik pasifleşir. Açılma takibi bu modda çalışmaz — geri açmak için{' '}
+          <code className="font-mono text-xs">MAIL_STYLE=&quot;tracked&quot;</code>.
+        </div>
+      ) : tracking && !tracking.enabled ? (
         <div className="mb-4 rounded-xl border border-[var(--color-line)] px-4 py-3 text-sm text-[var(--color-muted)]">
           <strong className="text-[var(--color-ink)]">Açılma takibi kapalı.</strong> Mailler takip
           pikseli ve görsel olmadan gönderiliyor — spam’e düşme riski en düşük hâlde. Gönderilenler
           yeşil/kırmızı işaretlenmeyecek; yanıt geldiğinde yine görürsünüz. Takibi açmak için kendi
           alan adınızı <code className="font-mono text-xs">MAIL_TRACKING_URL</code> olarak tanımlayın.
+        </div>
+      ) : null}
+
+      {tracking?.style === 'personal' && videoUrl.trim() ? (
+        <div className="mb-4 rounded-xl bg-[var(--color-warn-soft)] px-4 py-3 text-sm text-[var(--color-warn)]">
+          <strong>Video linki ilk maile konmayacak.</strong> Kişisel modda mailde hiç link
+          bulunmaz — linksiz düz metin, Birincil sekmeye düşmenin en güçlü biçimidir. Yanıt
+          verenlere göndermek için yanıt kutusuna ya da{' '}
+          <code className="font-mono text-xs">!mailcevap</code> metnine{' '}
+          <code className="font-mono text-xs">{'{{video}}'}</code> yazın; sistem gerçek adresle
+          değiştirir.
         </div>
       ) : null}
 
@@ -316,7 +347,10 @@ function Compose() {
             <Card>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold">AI önerisi</h2>
-                <SpamBadge score={review.spamScore} />
+                <div className="flex flex-wrap gap-2">
+                  <RiskBadge score={review.spamScore} kind="spam" />
+                  <RiskBadge score={review.promoRisk ?? 0} kind="promo" />
+                </div>
               </div>
               <p className="mb-1 text-xs text-[var(--color-muted)]">Konu</p>
               <p className="mb-3 text-sm font-medium">{review.subject}</p>
@@ -451,9 +485,16 @@ function Compose() {
   )
 }
 
-function SpamBadge({ score }: { score: number }) {
-  const level = score < 0.34 ? 'ok' : score < 0.67 ? 'warn' : 'warn'
-  const label = score < 0.34 ? 'Spam riski düşük' : score < 0.67 ? 'Spam riski orta' : 'Spam riski yüksek'
+/**
+ * Iki ayri risk: spam klasoru ve Gmail'in Tanitim sekmesi.
+ * Tanitim'a dusen mail spam degildir ama alicinin telefonu titremez —
+ * Gmail varsayilan olarak yalnizca Birincil sekme icin bildirim gonderir.
+ */
+function RiskBadge({ score, kind }: { score: number; kind: 'spam' | 'promo' }) {
+  const level = score < 0.34 ? 'ok' : 'warn'
+  const name = kind === 'spam' ? 'Spam riski' : 'Tanıtım sekmesi riski'
+  const degree = score < 0.34 ? 'düşük' : score < 0.67 ? 'orta' : 'yüksek'
+  const label = `${name} ${degree}`
 
   return (
     <span

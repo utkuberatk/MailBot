@@ -2,6 +2,7 @@ import { db } from '@/lib/db'
 import { isInternalRequest, unauthorized } from '@/lib/auth'
 import { polishReply } from '@/lib/groq'
 import { sendMail, getMessageIdHeader } from '@/lib/gmail'
+import { renderVideoPlaceholder } from '@/lib/mailer'
 import { env } from '@/lib/env'
 
 /**
@@ -26,7 +27,7 @@ export async function POST(
   // Listeden kaldirilmis yanit cevaplanmaz — kullanici onu artik gormuyor.
   const reply = await db.reply.findFirst({
     where: { id: replyId, deletedAt: null },
-    include: { message: { include: { company: true } } },
+    include: { message: { include: { company: true, campaign: true } } },
   })
   if (!reply) return Response.json({ error: 'Yanıt bulunamadı.' }, { status: 404 })
 
@@ -39,6 +40,9 @@ export async function POST(
       console.error('[answer] polishReply basarisiz:', error)
     }
   }
+
+  // Kisisel modda ilk maile link konmaz; video adresi yanit verenlere gider.
+  finalText = renderVideoPlaceholder(finalText, reply.message.campaign?.videoUrl)
 
   const sender = env.sender()
   const signature = [sender.name, sender.title].filter(Boolean).join('\n')
@@ -64,7 +68,10 @@ export async function POST(
       to: reply.fromEmail,
       subject,
       text: full,
-      html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937">${full
+      // Gmail'in kendi compose ciktisiyla ayni sade kalip: inline CSS yok.
+      // Sekme kararini thread'in ilk maili belirler, ama "elle yazilmis"
+      // gorunumunu bozmamak icin bicimlendirme eklemiyoruz.
+      html: `<div dir="ltr">${full
         .split('\n')
         .map((line) => line.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!))
         .join('<br>')}</div>`,

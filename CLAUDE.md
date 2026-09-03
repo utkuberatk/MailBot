@@ -97,7 +97,9 @@ Mailbot/
 
 **Yeşil/kırmızı kuralı:** `Message.openedAt == null` → kırmızı/tek tik, dolu → yeşil/çift tik.
 Ayrı bir alan tutma. `openedAt` yalnızca **gerçek** açılmalarda dolar; sahte açılma
-(`TrackEvent.isBot = true`) sayaçlara işlenmez.
+(`TrackEvent.isBot = true`) sayaçlara işlenmez. **Kişisel modda (varsayılan) piksel hiç
+gönderilmez**, dolayısıyla `openedAt` daima boştur ve UI açılma sütununu gizler — ilginin
+tek ölçüsü gelen yanıtlardır.
 
 ---
 
@@ -215,6 +217,33 @@ servis etmesiydi; kendi alan adımız bağlanınca o üstünlük de kalmıyor.
 - Alan adı gelmeden test için: `TRACKING_DEV_LOCAL="1"` + `MAIL_TRACKING_URL="http://127.0.0.1:3000"`
   (yalnızca `NODE_ENV != production`). UI kırmızı "GELİŞTİRME MODU" uyarısı gösterir.
 
+### ✅ Faz 11 — Birincil sekme / kişisel mod (tamamlandı)
+
+Mailler Gmail'in **Tanıtım (Promotions)** sekmesine düşüyordu. Gmail mobil uygulaması
+varsayılan olarak **yalnızca Birincil sekme için bildirim** gönderir — yani mail teslim
+oluyor ama karşı tarafın telefonu hiç titremiyor ve mail çoğu zaman görülmüyordu.
+
+- **`MAIL_STYLE`** (`lib/env.ts`): `personal` (varsayılan) | `tracked`.
+- **Kişisel modda mail düz metindir:** `buildMime()` tek parçalı `text/plain` kurar
+  (multipart yok, HTML yok), maile **hiç link konmaz**, takip pikseli yok,
+  `List-Unsubscribe` başlığı **gönderilmez**.
+- **Kişisel modda `mailTrackingUrl()` her zaman boş döner** — piksel, sarılmış link ve https
+  çıkış linki tek noktadan kapanır; `lib/mailer.ts` ve `lib/tracking.ts` ayrı kontrol yapmaz.
+- **Çıkış yolu gövdedeki doğal cümledir:** *"İlginizi çekmiyorsa 'ilgilenmiyorum' yazıp
+  yanıtlamanız yeterli, bir daha yazmam."* 6563 sayılı Kanun tacire önceden izin şartı
+  aramaz ama **reddetme imkânı zorunludur**; bu cümle onu karşılar ve "listeden çıkın /
+  abonelik" toplu-mail dilini içermez. Yanıt `isOptOutRequest()` ile yakalanır (regex'e
+  `ilgilenmiyor`, `yazmayin`, `gondermeyin` kalıpları eklendi).
+- **Video artık ilk mailde gitmez.** Yanıt metnindeki `{{video}}` yer tutucusu
+  `/api/replies/[id]/answer` içinde kampanyanın adresiyle değiştirilir; `polishReply`
+  promptu yer tutucuyu aynen korumakla yükümlü.
+- **`improveEmail()` artık `promoRisk` de döner** — Tanıtım sekmesi riski, spam riskinden
+  ayrı. Prompt pazarlama dilini yasaklar ve metnin **bir soruyla bitmesini** ister: yanıt,
+  Gmail'in o kişiyi kalıcı olarak Birincil'e taşımasını sağlayan en güçlü sinyaldir.
+- **Ödün:** kişisel modda açılma takibi (Faz 10) çalışmaz. Kod silinmedi;
+  `MAIL_STYLE="tracked"` ile geri açılır.
+- **Garanti yoktur:** sekme kararını Gmail verir, alıcının geçmiş davranışı da etkiler.
+
 ---
 
 ## 7. API sözleşmeleri
@@ -244,9 +273,9 @@ Tüm fonksiyonlar JSON döner; parse hatasında 1 kez retry, sonra hata.
 |---|---|---|
 | `buildSearchQueries(prompt)` | kullanıcı promptu | `{ queries: string[] }` (3-5 adet, Türkçe arama sorgusu) |
 | `classifyCompany(site)` | site metni | `{ isEcommerce: boolean, sector: string, city: string\|null, confidence: number }` |
-| `improveEmail(draft, company)` | taslak + şirket bilgisi | `{ subject, body, spamScore, warnings[] }` — **niyeti ve tonu korur**, uydurma bilgi eklemez |
+| `improveEmail(draft, company)` | taslak + şirket bilgisi | `{ subject, body, spamScore, promoRisk, warnings[] }` — **niyeti ve tonu korur**, uydurma bilgi eklemez; pazarlama dili yasak, metin bir soruyla biter |
 | `analyzeReply(text)` | yanıt metni | `{ sentiment: "POSITIVE"\|"NEUTRAL"\|"NEGATIVE", score: 0-1, summary: string }` |
-| `polishReply(text, context)` | kullanıcının kısa yanıtı | `{ body }` — Gmail'den elle yazılmış gibi doğal, imzalı |
+| `polishReply(text, context)` | kullanıcının kısa yanıtı | `{ body }` — Gmail'den elle yazılmış gibi doğal, imzalı; `{{video}}` yer tutucusunu aynen korur |
 
 Model `.env`'deki `GROQ_MODEL` ile seçilir.
 
@@ -272,6 +301,19 @@ hiç yanıt yoksa bunu ve nasıl yanıt toplanacağını açıklar.
 ---
 
 ## 10. Spam'e düşmeme kuralları
+
+**Spam'e düşmek tek risk değil — "Tanıtım" sekmesi de bir risk.** Tanıtım'a düşen mail
+spam değildir, teslim edilir; ama Gmail mobil uygulaması varsayılan olarak yalnızca
+**Birincil** sekme için bildirim gönderir. Yani alıcının telefonu titremez ve mail çoğu
+zaman hiç görülmez. Gmail'i Tanıtım'a iten dört sinyal:
+
+1. `List-Unsubscribe` başlığı — en güçlü "bu toplu mail" sinyali.
+2. `multipart/alternative` + inline CSS'li HTML gövde.
+3. Gövdedeki abonelikten çıkma dili ("listeden çıkın", "abonelik").
+4. Maildeki linkler ve takip pikseli.
+
+Bunlar tek tek ölümcül değil, **birikimli** çalışır. `MAIL_STYLE="personal"` (varsayılan)
+dördünü de kaldırır: düz metin, linksiz, başlıksız. Bkz. Faz 11.
 
 **En kritik kural — maildeki bağlantıların alan adı.** Geçici tünel adresleri
 (`*.trycloudflare.com`, `*.ngrok-free.app` vb.) oltalama için yoğun şekilde kötüye
@@ -334,6 +376,7 @@ girmemeli.
 | `APP_URL` | Sabit: `http://localhost:3000` | ✅ |
 | `APP_INTERNAL_API_KEY` | Kendin üret (rastgele 32 karakter) | ✅ |
 | `GROQ_API_KEY` | console.groq.com → API Keys | ✅ |
+| `MAIL_STYLE` | Boş/`personal` (varsayılan, düz metin → Birincil sekme) veya `tracked` (HTML + piksel) | ➖ |
 | `MAIL_TRACKING_URL` | **Kendi alan adınız** (`https://mail.alanadiniz.com`). Tünel adresleri reddedilir. Boşsa takip kapanır, mailler daha temiz gider | ➖ |
 | `TRACKING_DEV_LOCAL` | Yalnızca geliştirme: `"1"` iken `http://127.0.0.1:3000` takip adresi olarak kabul edilir. Üretimde boş bırakın | ➖ |
 | `CLOUDFLARE_TUNNEL_NAME` | Kalıcı tünel adı; doluysa `MailBot.bat` tüneli açar | ➖ |

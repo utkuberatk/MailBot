@@ -41,7 +41,41 @@ başlatır ve tarayıcıyı açar.
 Google Cloud projesinde **Gmail API'yi etkinleştirmeyi** unutmayın; Discord Developer Portal'da
 **MESSAGE CONTENT INTENT** açık olmalı.
 
+### Mailim "Tanıtım" sekmesine düşüyor (`MAIL_STYLE`)
+
+Tanıtım'a düşen mail spam değildir, kutuya teslim edilir — ama Gmail mobil uygulaması
+**varsayılan olarak yalnızca Birincil sekme için bildirim** gönderir. Alıcının telefonu
+titremez ve mail çoğu zaman hiç görülmez.
+
+Gmail'i Tanıtım'a iten dört sinyal: `List-Unsubscribe` başlığı, HTML gövde, gövdedeki
+abonelik dili ve maildeki linkler/takip pikseli. Tek tek ölümcül değil, birikimli çalışırlar.
+
+**Varsayılan `MAIL_STYLE="personal"` dördünü de kaldırır:**
+
+| | Kişisel mod (varsayılan) | `MAIL_STYLE="tracked"` |
+|---|---|---|
+| Gövde | tek parçalı `text/plain` | `multipart/alternative` + HTML |
+| Link | **hiç yok** | video/CTA linki (takipliyse sarılmış) |
+| Takip pikseli | yok | takip adresi varsa var |
+| `List-Unsubscribe` | **gönderilmez** | gönderilir |
+| Listeden çıkma | metnin sonunda doğal cümle | başlık + link/mailto |
+| Açılma takibi | çalışmaz | çalışır |
+
+Kişisel modda çıkış şöyle sunulur: *"İlginizi çekmiyorsa 'ilgilenmiyorum' yazıp yanıtlamanız
+yeterli, bir daha yazmam."* Böyle bir yanıt gelirse şirket otomatik pasifleşir.
+
+**Video ne olacak?** İlk maile link konmadığı için video, yanıt verenlere gönderilir: yanıt
+kutusuna ya da `!mailcevap` metnine `{{video}}` yazın, sistem kampanyanın gerçek adresiyle
+değiştirir.
+
+**Garanti yok:** sekme kararını Gmail verir ve alıcının geçmiş davranışı da etkiler. En
+kalıcı etki, alıcının maile **yanıt vermesidir** — Gmail o kişiyi kalıcı olarak Birincil'e
+taşır. Bu yüzden AI metni bir soruyla bitirir.
+
 ### Açılma takibi ve spam (`MAIL_TRACKING_URL`)
+
+> Aşağıdakiler yalnızca `MAIL_STYLE="tracked"` iken geçerlidir.
+
 
 Takip pikseli ve video önizlemesi mailin **içinden** çağrılır, yani maildeki bağlantıların alan
 adı doğrudan teslimatı etkiler. Geçici tünel adresleri (`*.trycloudflare.com`, `*.ngrok-free.app`)
@@ -104,12 +138,13 @@ arayüze uzaktan bakmak içindir**, mail takibinde kullanılamaz.
    bilgileriyle şirketleri tabloya düşürür.
 2. **Şirketler** — filtreleyin, elle ekleyin ya da CSV yükleyin, göndereceklerinizi seçin.
 3. **Mail Yaz** — taslağınızı yazın, *AI ile iyileştir* deyin (niyetinizi korur, sadece dili
-   düzeltir ve spam skoru verir), isterseniz video ekleyin, gönderin. Mailler arasında 45-90 sn
+   düzeltir, spam ve Tanıtım sekmesi riskini gösterir), isterseniz video ekleyin, gönderin. Mailler arasında 45-90 sn
    beklenir. Isınma dönemi: ilk 3 gün 5, 1. hafta 10, 2. hafta 20, 3. hafta 35, sonrasında 50
    mail/gün. Kalan hak ve aşama sayfanın sağ üstünde yazar.
 4. **Gelen Kutusu** — *Yanıtlar* sekmesi varsayılan olarak sadece OLUMLU yanıtları gösterir; kartın
-   içinden kısa bir not yazıp AI'ın düzelttiği yanıtı thread'e gönderebilirsiniz. *Gönderilenler*
-   sekmesinde açılanlar yeşil, açılmayanlar kırmızı noktayla işaretlidir.
+   içinden kısa bir not yazıp AI'ın düzelttiği yanıtı thread'e gönderebilirsiniz (`{{video}}`
+   yazarsanız kampanyanın video adresi eklenir). *Gönderilenler* sekmesi kişisel modda yalnızca
+   gönderim durumunu gösterir; `MAIL_STYLE="tracked"` iken açılanlar ✓✓ ile işaretlenir.
 5. **Discord** — `!komutlar` yazınca tüm komutların anlatıldığı sayfa gelir:
    `!mailara ['İstanbul İçi Butik']`, `!mailcevap 42 "Yarın 15:00 uygun"`, `!durum`.
    `!mailcevap`'taki sayı yanıt ID'sidir; bildirim mesajında ve Gelen Kutusu'nda yazar.
