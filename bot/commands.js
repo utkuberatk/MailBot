@@ -136,6 +136,7 @@ async function durum(message) {
       { name: 'Şirket', value: String(stats.companies), inline: true },
       { name: 'Gönderilen', value: String(stats.sent), inline: true },
       { name: 'Açılan', value: String(stats.opened), inline: true },
+      { name: 'Tıklanan', value: String(stats.clicked ?? 0), inline: true },
       { name: 'Yanıt', value: String(stats.replies), inline: true },
       { name: 'Olumlu', value: String(stats.positive), inline: true },
       { name: 'Kuyrukta', value: String(stats.queued), inline: true },
@@ -146,6 +147,14 @@ async function durum(message) {
       { name: 'Aşama', value: stats.quota.stage || '—' },
     )
     .setTimestamp(new Date())
+
+  if (stats.tracking && !stats.tracking.enabled) {
+    embed.setFooter({
+      text: 'Açılma takibi kapalı — .env içindeki MAIL_TRACKING_URL boş. "Açılan" hep 0 kalır.',
+    })
+  } else if (stats.tracking?.devMode) {
+    embed.setFooter({ text: 'GELİŞTİRME MODU: takip adresi yerel, alıcıda çalışmaz.' })
+  }
 
   await message.reply({ embeds: [embed] })
 }
@@ -184,15 +193,26 @@ async function komutlar(message) {
         name: '📊 !durum — özet rapor',
         value:
           '```\n!durum\n```' +
-          'Kayıtlı şirket, gönderilen, açılan, yanıt, olumlu yanıt ve kuyrukta bekleyen ' +
-          'mail sayısını, ayrıca kalan günlük/saatlik gönderim hakkını gösterir.',
+          'Kayıtlı şirket, gönderilen, açılan, tıklanan, yanıt, olumlu yanıt ve kuyrukta ' +
+          'bekleyen mail sayısını, ayrıca kalan günlük/saatlik gönderim hakkını gösterir.',
       },
       {
         name: '🔔 Otomatik bildirimler',
         value:
-          'Gelen yanıtlar arasında **olumlu** olanlar dakikada bir kontrol edilir ve ' +
-          'buraya otomatik düşer. Nötr ve olumsuz yanıtlar için bildirim gönderilmez; ' +
-          'onları uygulamadaki Gelen Kutusu’ndan görebilirsiniz.',
+          'Dakikada bir kontrol edilir ve buraya otomatik düşer:\n' +
+          '• **Olumlu yanıtlar** — nötr ve olumsuz olanlar için bildirim gönderilmez.\n' +
+          '• **📖 Mailiniz açıldı** — bir şirket mailinizi ilk kez açtığında. Aynı mail için ' +
+          'yalnızca bir kez bildirilir; sonraki açılmalar uygulamadaki **Gelen Kutusu → ' +
+          'Gönderilenler** sekmesinde satıra tıklayınca görünür.',
+      },
+      {
+        name: '👁 Açılma takibi nasıl çalışır?',
+        value:
+          'Maile görünmez 1×1 piksel konur; alıcı maili açıp görselleri yüklediğinde kayıt ' +
+          'düşer. Listede **✓** gönderildi, **✓✓** açıldı, **🔗** linke tıklandı demektir.\n' +
+          '*Piksel yalnızca kendi alan adınızdan servis edilebilir* — `.env` içindeki ' +
+          '`MAIL_TRACKING_URL` boşsa takip kapalıdır ve "Açılan" hep 0 kalır. Alıcı görselleri ' +
+          'engellerse açılma görünmez; tıklama takibi bu durumda tek sinyaldir.',
       },
       {
         name: '⏱️ Gönderim limitleri',

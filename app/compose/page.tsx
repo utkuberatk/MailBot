@@ -21,7 +21,7 @@ type Quota = {
   stage: string
 }
 
-type Tracking = { enabled: boolean }
+type Tracking = { enabled: boolean; devMode?: boolean }
 
 type Improved = { subject: string; body: string; spamScore: number; warnings: string[] }
 
@@ -251,6 +251,15 @@ function Compose() {
           pikseli ve görsel olmadan gönderiliyor — spam’e düşme riski en düşük hâlde. Gönderilenler
           yeşil/kırmızı işaretlenmeyecek; yanıt geldiğinde yine görürsünüz. Takibi açmak için kendi
           alan adınızı <code className="font-mono text-xs">MAIL_TRACKING_URL</code> olarak tanımlayın.
+        </div>
+      ) : null}
+
+      {tracking?.devMode ? (
+        <div className="mb-4 rounded-xl bg-[var(--color-warn-soft)] px-4 py-3 text-sm text-[var(--color-warn)]">
+          <strong>GELİŞTİRME MODU.</strong> Takip adresi yerel bir adres
+          (<code className="font-mono text-xs">TRACKING_DEV_LOCAL</code>). Maile konan piksel ve
+          tıklama linkleri <strong>alıcının bilgisayarında çalışmaz</strong> — bu ayar yalnızca
+          kendi makinenizde test içindir. Gerçek gönderim öncesi kendi alan adınızı yazın.
         </div>
       ) : null}
 

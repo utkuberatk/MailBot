@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { PageHeader, Card, EmptyState } from '@/components/ui'
 
 type Reply = {
@@ -21,6 +21,14 @@ type Reply = {
   }
 }
 
+type TrackEvent = {
+  id: number
+  type: string
+  at: string
+  target: string | null
+  device: string
+}
+
 type Message = {
   id: number
   toEmail: string
@@ -28,13 +36,19 @@ type Message = {
   status: string
   sentAt: string | null
   openedAt: string | null
+  lastOpenedAt: string | null
   openCount: number
+  firstClickAt: string | null
+  clickCount: number
   error: string | null
   company: { id: number; name: string; domain: string | null }
   replies: { id: number; sentiment: string; summary: string | null }[]
+  events: TrackEvent[]
 }
 
-type Stats = { byStatus: Record<string, number>; opened: number }
+type Stats = { byStatus: Record<string, number>; opened: number; clicked: number }
+
+type Tracking = { enabled: boolean; devMode: boolean }
 
 const SENTIMENT_LABELS: Record<string, string> = {
   POSITIVE: 'Olumlu',
@@ -49,6 +63,8 @@ export default function InboxPage() {
   const [replies, setReplies] = useState<Reply[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
+  const [tracking, setTracking] = useState<Tracking | null>(null)
+  const [expanded, setExpanded] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -66,6 +82,7 @@ export default function InboxPage() {
       const data = await messageResponse.json()
       setMessages(data.messages)
       setStats(data.stats)
+      setTracking(data.tracking)
     }
     setLoading(false)
   }, [onlyPositive])
@@ -131,8 +148,28 @@ export default function InboxPage() {
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <Pill label="Gönderildi" value={stats.byStatus.SENT ?? 0} />
           <Pill label="Açıldı" value={stats.opened} tone="ok" />
+          <Pill label="Tıklandı" value={stats.clicked} tone="ok" />
           <Pill label="Kuyrukta" value={stats.byStatus.QUEUED ?? 0} />
           <Pill label="Hatalı" value={stats.byStatus.FAILED ?? 0} tone="warn" />
+        </div>
+      ) : null}
+
+      {tab === 'sent' && tracking && !tracking.enabled ? (
+        <div className="mb-4 rounded-xl bg-[var(--color-warn-soft)] px-4 py-3 text-sm text-[var(--color-warn)]">
+          <strong>Açılma takibi kapalı.</strong> Aşağıdaki maillerin hepsi &quot;açılmadı&quot;
+          görünür — bu bir arıza değil. Takip pikseli yalnızca kendi alan adınızdan servis
+          edilebilir; <code>.env</code> içindeki <code>MAIL_TRACKING_URL</code> boş olduğu için
+          maillere piksel konmuyor. Alan adınızı bağladığınızda bundan sonra gönderilen mailler
+          otomatik takip edilir.
+        </div>
+      ) : null}
+
+      {tab === 'sent' && tracking?.devMode ? (
+        <div className="mb-4 rounded-xl bg-[var(--color-warn-soft)] px-4 py-3 text-sm text-[var(--color-warn)]">
+          <strong>GELİŞTİRME MODU.</strong> Takip adresi yerel bir adres
+          (<code>TRACKING_DEV_LOCAL</code>). Bu maillerdeki takip linkleri{' '}
+          <strong>alıcının bilgisayarında çalışmaz</strong>; yalnızca sizin makinenizde test
+          içindir. Gerçek gönderim öncesi kendi alan adınızı yazın.
         </div>
       ) : null}
 
@@ -233,37 +270,51 @@ export default function InboxPage() {
             </thead>
             <tbody>
               {messages.map((message) => (
-                <tr
-                  key={message.id}
-                  className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-canvas)]"
-                >
-                  <td className="px-4 py-3">
-                    <StatusDot message={message} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{message.company.name}</div>
-                    <div className="text-xs text-[var(--color-muted)]">{message.toEmail}</div>
-                  </td>
-                  <td className="max-w-64 truncate px-4 py-3">{message.subject}</td>
-                  <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
-                    {message.sentAt ? new Date(message.sentAt).toLocaleString('tr-TR') : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {message.openedAt ? (
-                      <span className="text-[var(--color-ok)]">
-                        {new Date(message.openedAt).toLocaleString('tr-TR')}
-                        {message.openCount > 1 ? ` (${message.openCount}×)` : ''}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--color-warn)]">açılmadı</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {message.replies.length > 0
-                      ? SENTIMENT_LABELS[message.replies[0].sentiment] ?? message.replies[0].sentiment
-                      : '—'}
-                  </td>
-                </tr>
+                <Fragment key={message.id}>
+                  <tr
+                    onClick={() =>
+                      setExpanded((current) => (current === message.id ? null : message.id))
+                    }
+                    className="cursor-pointer border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-canvas)]"
+                  >
+                    <td className="px-4 py-3">
+                      <CheckMarks message={message} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{message.company.name}</div>
+                      <div className="text-xs text-[var(--color-muted)]">{message.toEmail}</div>
+                    </td>
+                    <td className="max-w-64 truncate px-4 py-3">{message.subject}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
+                      {message.sentAt ? new Date(message.sentAt).toLocaleString('tr-TR') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {message.openedAt ? (
+                        <span className="text-[var(--color-ok)]">
+                          {new Date(message.lastOpenedAt ?? message.openedAt).toLocaleString('tr-TR')}
+                          {message.openCount > 1 ? ` (${message.openCount}×)` : ''}
+                          {message.clickCount > 0 ? ' 🔗' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-[var(--color-warn)]">açılmadı</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {message.replies.length > 0
+                        ? SENTIMENT_LABELS[message.replies[0].sentiment] ??
+                          message.replies[0].sentiment
+                        : '—'}
+                    </td>
+                  </tr>
+
+                  {expanded === message.id ? (
+                    <tr className="border-b border-[var(--color-line)] last:border-0">
+                      <td colSpan={6} className="bg-[var(--color-canvas)] px-4 py-3">
+                        <EventList message={message} />
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -273,22 +324,68 @@ export default function InboxPage() {
   )
 }
 
-/** Yesil = acildi, kirmizi = acilmadi (CLAUDE.md bolum 5). */
-function StatusDot({ message }: { message: Message }) {
+/**
+ * Tek gri tik = gonderildi, cift yesil tik = acildi (CLAUDE.md bolum 5:
+ * openedAt null ise kirmizi/acilmamis, dolu ise yesil).
+ */
+function CheckMarks({ message }: { message: Message }) {
   if (message.status === 'FAILED') {
-    return <span title={message.error ?? 'Hata'} className="text-xs text-[var(--color-warn)]">hata</span>
+    return (
+      <span title={message.error ?? 'Hata'} className="text-xs text-[var(--color-warn)]">
+        ✗ hata
+      </span>
+    )
   }
   if (message.status === 'QUEUED') {
-    return <span className="text-xs text-[var(--color-muted)]">kuyrukta</span>
+    return <span className="text-xs text-[var(--color-muted)]">🕑 kuyrukta</span>
   }
 
-  const opened = Boolean(message.openedAt)
+  if (!message.openedAt) {
+    return (
+      <span className="text-sm text-[var(--color-muted)]" title="Gönderildi, henüz açılmadı">
+        ✓
+      </span>
+    )
+  }
+
+  const first = new Date(message.openedAt).toLocaleString('tr-TR')
+  const last = new Date(message.lastOpenedAt ?? message.openedAt).toLocaleString('tr-TR')
+  const title =
+    `İlk açılma: ${first}` +
+    (message.openCount > 1 ? `\nSon açılma: ${last}\nToplam: ${message.openCount} kez` : '') +
+    (message.clickCount > 0 ? `\nLinke tıklandı: ${message.clickCount} kez` : '')
+
   return (
-    <span
-      className="inline-block h-2.5 w-2.5 rounded-full"
-      style={{ background: opened ? 'var(--color-ok)' : 'var(--color-warn)' }}
-      title={opened ? 'Açıldı' : 'Henüz açılmadı'}
-    />
+    <span className="text-sm font-semibold text-[var(--color-ok)]" title={title}>
+      ✓✓{message.clickCount > 0 ? ' 🔗' : ''}
+    </span>
+  )
+}
+
+/** Satir genisletilince gorunen acilma/tiklama gecmisi. */
+function EventList({ message }: { message: Message }) {
+  if (message.events.length === 0) {
+    return (
+      <p className="text-xs text-[var(--color-muted)]">
+        Bu mail için kayıtlı açılma yok. (Alıcı görselleri engelliyor olabilir; tıklama takibi
+        böyle durumlarda tek sinyaldir.)
+      </p>
+    )
+  }
+
+  return (
+    <ul className="grid gap-1 text-xs text-[var(--color-muted)]">
+      {message.events.map((event) => (
+        <li key={event.id} className="flex flex-wrap items-center gap-2">
+          <span className={event.type === 'CLICK' ? 'text-[var(--color-brand)]' : ''}>
+            {event.type === 'CLICK' ? '🔗 tıklama' : '👁 açılma'}
+          </span>
+          <span>{new Date(event.at).toLocaleString('tr-TR')}</span>
+          <span>· {event.device}</span>
+          {event.target ? <span className="truncate">· {event.target}</span> : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 

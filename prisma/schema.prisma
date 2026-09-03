@@ -76,18 +76,53 @@ model Message {
   gmailMessageId String?
   gmailThreadId  String?
   sentAt         DateTime?
-  /// null ise UI'da kirmizi, dolu ise yesil gosterilir.
+  /// Ilk gercek acilma. null ise UI'da kirmizi/tek tik, dolu ise cift yesil tik.
+  /// Sahte acilma (mail tarayici, on yukleme) burayi doldurmaz.
   openedAt       DateTime?
+  /// Son gercek acilma — "3 kez acildi, en son 14:20" gorunumu icin.
+  lastOpenedAt   DateTime?
   openCount      Int       @default(0)
+  /// Maildeki takipli linke ilk tiklama. Acilmadan daha guclu bir ilgi sinyali.
+  firstClickAt   DateTime?
+  clickCount     Int       @default(0)
+  /// "Mailiniz acildi" bildirimi Discord'a dusuruldugunde damgalanir.
+  openNotifiedAt DateTime?
   error          String?
   createdAt      DateTime  @default(now())
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   replies  Reply[]
+  events   TrackEvent[]
 
   @@index([status])
   @@index([gmailThreadId])
+  @@index([openedAt])
+}
+
+/// Tek bir acilma veya tiklama olayi.
+///
+/// Message.openedAt/openCount ozet alanlardir; burasi ham kayittir. Sahte
+/// acilmalar da (isBot = true) yazilir ki filtrenin ne eledigi gorulebilsin.
+model TrackEvent {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  /// OPEN | CLICK
+  type      String
+  /// CLICK icin tiklanan adres
+  target    String?
+  at        DateTime @default(now())
+  userAgent String?
+  ip        String?
+  /// Sahte acilma filtresinin karari — true ise sayaclara islenmez.
+  isBot     Boolean  @default(false)
+  /// isBot ise hangi kurala takildigi
+  reason    String?
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, type])
+  @@index([at])
 }
 
 /// Gelen yanit ve AI analizi.

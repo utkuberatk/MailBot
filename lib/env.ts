@@ -71,6 +71,17 @@ export function isTrustedMailUrl(value: string): boolean {
   return !UNTRUSTED_MAIL_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`))
 }
 
+/** Yerel gelistirme adresi mi? (Sadece TRACKING_DEV_LOCAL ile kabul edilir.) */
+export function isLocalDevUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    const host = url.hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
 /**
  * `localhost` yerine `127.0.0.1` kullanir.
  *
@@ -99,10 +110,26 @@ export const env = {
    */
   mailTrackingUrl: () => {
     const value = optionalEnv('MAIL_TRACKING_URL').trim().replace(/\/$/, '')
-    if (!value || !isTrustedMailUrl(value)) return ''
-    return value
+    if (!value) return ''
+    if (isTrustedMailUrl(value)) return value
+    if (env.trackingDevLocal() && isLocalDevUrl(value)) return value
+    return ''
   },
   trackingEnabled: () => env.mailTrackingUrl() !== '',
+
+  /**
+   * Gelistirme kapisi.
+   *
+   * TRACKING_DEV_LOCAL="1" iken (ve yalnizca production disinda) takip adresi
+   * olarak http://127.0.0.1:3000 kabul edilir. Boylece alan adi alinmadan once
+   * piksel -> olay -> cift tik -> Discord zinciri uctan uca test edilebilir.
+   * Bu maillerdeki takip linkleri ALICIDA CALISMAZ; UI kirmizi uyari gosterir.
+   */
+  trackingDevLocal: () =>
+    process.env.NODE_ENV !== 'production' && optionalEnv('TRACKING_DEV_LOCAL') === '1',
+
+  /** Takip acik ama yerel bir adresle mi calisiyor? (UI uyarisi icin.) */
+  trackingDevMode: () => env.trackingEnabled() && isLocalDevUrl(env.mailTrackingUrl()),
 
   internalApiKey: () => requireEnv('APP_INTERNAL_API_KEY'),
 

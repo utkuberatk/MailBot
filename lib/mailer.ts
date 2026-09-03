@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
 import { sendMail } from '@/lib/gmail'
+import { trackedLink } from '@/lib/tracking'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -177,15 +178,20 @@ export function buildHtml(content: MailContent): string {
     .map((block) => `<p style="margin:0 0 14px">${block}</p>`)
     .join('')
 
+  // Tek CTA linki takip acikken kendi alan adimiz uzerinden gecirilir; boylece
+  // tiklama kaydedilir. Takip kapaliyken adres oldugu gibi kalir (YouTube linki
+  // YouTube linki olarak gider) — itibarsiz bir alan adi maile hic girmez.
+  const videoHref = content.videoUrl ? trackedLink(content.trackingId, content.videoUrl) : ''
+
   // Gorsel yalnizca kendi alan adimizdan servis edilebiliyorsa gomulur;
   // aksi halde videonun kendi adresine (YouTube/Vimeo) duz bir link verilir.
   const video = !content.videoUrl
     ? ''
     : trackingUrl && content.videoThumbUrl
-      ? `<p style="margin:0 0 18px"><a href="${escapeHtml(content.videoUrl)}">` +
+      ? `<p style="margin:0 0 18px"><a href="${escapeHtml(videoHref)}">` +
         `<img src="${escapeHtml(content.videoThumbUrl)}" alt="Videoyu izleyin" ` +
         `width="480" style="max-width:100%;border-radius:8px;display:block"></a></p>`
-      : `<p style="margin:0 0 18px"><a href="${escapeHtml(content.videoUrl)}" ` +
+      : `<p style="margin:0 0 18px"><a href="${escapeHtml(videoHref)}" ` +
         `style="color:#2563eb">Kısa videoyu izleyin</a></p>`
 
   const signature = [sender.name, sender.title, sender.address]
@@ -219,7 +225,7 @@ export function buildText(content: MailContent): string {
   const sender = env.sender()
   const parts = [content.body.trim()]
 
-  if (content.videoUrl) parts.push(`Video: ${content.videoUrl}`)
+  if (content.videoUrl) parts.push(`Video: ${trackedLink(content.trackingId, content.videoUrl)}`)
   parts.push([sender.name, sender.title, sender.address].filter(Boolean).join('\n'))
   parts.push(
     trackingUrl
@@ -340,11 +346,18 @@ async function sendOne(message: {
 
   const unsubscribe = listUnsubscribeHeader(message.trackingId)
 
+  // bodyHtml kuyruga alma aninda donar. Takip sonradan acildiysa kuyrukta
+  // bekleyen mailler pikselsiz giderdi — bu durumda HTML yeniden uretilir.
+  const html =
+    env.trackingEnabled() && content.body && !message.bodyHtml.includes('/api/track/')
+      ? buildHtml(content)
+      : message.bodyHtml
+
   try {
     const sent = await sendMail({
       to: message.toEmail,
       subject: message.subject,
-      html: message.bodyHtml,
+      html,
       text: buildText(content),
       listUnsubscribe: unsubscribe.value,
       listUnsubscribeOneClick: unsubscribe.oneClick,
@@ -357,6 +370,7 @@ async function sendOne(message: {
         sentAt: new Date(),
         gmailMessageId: sent.id,
         gmailThreadId: sent.threadId,
+        bodyHtml: html,
         error: null,
       },
     })

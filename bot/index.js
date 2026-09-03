@@ -5,7 +5,7 @@
  *
  * Uygulamanin HTTP API'sini cagirir; veritabanina dogrudan dokunmaz.
  * Komutlari yalnizca DISCORD_OWNER_ID calistirabilir.
- * Yeni POZITIF yanitlar belirlenen kanala embed olarak dusulur.
+ * Yeni POZITIF yanitlar ve ilk kez acilan mailler kanala embed olarak dusulur.
  */
 
 require('dotenv/config')
@@ -55,12 +55,41 @@ function replyEmbed(reply) {
     .setTimestamp(new Date(reply.receivedAt))
 }
 
-/** Bildirilmemis olumlu yanitlari kanala dus, sonra isaretle. */
-async function pushPositiveReplies() {
-  let channel
+/** "Mailiniz acildi" bildirimi. */
+function openEmbed(message) {
+  const opened = new Date(message.lastOpenedAt || message.openedAt)
+  const sent = message.sentAt ? new Date(message.sentAt) : null
+  const minutes = sent ? Math.round((opened.getTime() - sent.getTime()) / 60000) : null
+
+  const embed = new EmbedBuilder()
+    .setColor(0x0ea5e9)
+    .setTitle(`📖 ${message.company.name} mailinizi açtı`)
+    .addFields(
+      { name: 'Konu', value: message.subject.slice(0, 200) },
+      { name: 'Alıcı', value: message.toEmail, inline: true },
+      { name: 'Açılma', value: `${message.openCount}×`, inline: true },
+    )
+    .setTimestamp(opened)
+
+  if (minutes !== null) {
+    const elapsed =
+      minutes < 60 ? `${minutes} dk` : `${Math.round(minutes / 60)} saat`
+    embed.addFields({ name: 'Gönderimden sonra', value: elapsed, inline: true })
+  }
+
+  if (message.clickCount > 0) {
+    embed.addFields({ name: 'Link tıklaması', value: `${message.clickCount}×`, inline: true })
+  }
+
+  return embed
+}
+
+/** Kanali cozer; ID yanlissa erisilebilen kanallari listeler. */
+async function resolveChannel() {
   try {
-    channel = await client.channels.fetch(CHANNEL_ID)
+    const channel = await client.channels.fetch(CHANNEL_ID)
     if (!channel || !channel.isTextBased()) throw new Error('metin kanali degil')
+    return channel
   } catch {
     // En sik hata: kanal ID'si yerine sunucu ID'si girilmesi. Secenekleri yaz.
     console.error(`\n[bot] Kanal bulunamadi: ${CHANNEL_ID}`)
@@ -74,9 +103,12 @@ async function pushPositiveReplies() {
       }
     }
     console.error('')
-    return
+    return null
   }
+}
 
+/** Bildirilmemis olumlu yanitlari kanala dus, sonra isaretle. */
+async function pushPositiveReplies(channel) {
   const data = await api.get('/api/replies?sentiment=POSITIVE&notified=0')
   const replies = data.replies || []
   if (replies.length === 0) return
@@ -89,6 +121,29 @@ async function pushPositiveReplies() {
   console.log(`[bot] ${replies.length} olumlu yanit bildirildi.`)
 }
 
+/** Ilk kez acilan mailleri kanala dus, sonra isaretle. */
+async function pushOpenedMails(channel) {
+  const data = await api.get('/api/tracking/pending')
+  const messages = data.messages || []
+  if (messages.length === 0) return
+
+  for (const message of messages) {
+    await channel.send({ embeds: [openEmbed(message)] })
+  }
+
+  await api.patch('/api/tracking/pending', { ids: messages.map((message) => message.id) })
+  console.log(`[bot] ${messages.length} acilma bildirildi.`)
+}
+
+/** Tek turda tum bildirimler. */
+async function pushNotifications() {
+  const channel = await resolveChannel()
+  if (!channel) return
+
+  await pushPositiveReplies(channel)
+  await pushOpenedMails(channel)
+}
+
 client.once('clientReady', async () => {
   console.log(`\n✓ Bot hazir: ${client.user.tag}`)
   console.log(`  Kanal   : ${CHANNEL_ID}`)
@@ -96,7 +151,7 @@ client.once('clientReady', async () => {
   console.log(`  Uygulama: ${api.APP_URL}\n`)
 
   const tick = () =>
-    pushPositiveReplies().catch((error) => console.error('[bot] bildirim hatasi:', error.message))
+    pushNotifications().catch((error) => console.error('[bot] bildirim hatasi:', error.message))
 
   tick()
   setInterval(tick, POLL_INTERVAL_MS)

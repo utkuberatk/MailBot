@@ -71,6 +71,25 @@ Alan adı ücretlidir; gerisi ücretsizdir.
 Artık `MailBot.bat` tüneli otomatik başlatır, piksel ve video önizlemesi kendi alan adınızdan
 servis edilir, açılma takibi çalışır.
 
+#### Takip açıkken ne olur
+
+- **Gelen Kutusu → Gönderilenler**: ✓ gönderildi · **✓✓** açıldı · **🔗** maildeki linke tıklandı.
+  Satıra tıklayınca açılma/tıklama geçmişi (zaman + cihaz) açılır.
+- **Discord**: bir şirket mailinizi ilk kez açtığında kanala `📖 ... mailinizi açtı` bildirimi
+  düşer (aynı mail için yalnızca bir kez).
+- **Sahte açılma filtresi**: mail tarayıcılarının ve önizleme botlarının ürettiği istekler
+  `TrackEvent.isBot` olarak işaretlenir, sayaçlara girmez. Gmail'in görsel proxy'si
+  (`GoogleImageProxy`) **gerçek açılmadır**, elenmez.
+- **Sınırlar**: alıcı görselleri engellerse açılma hiç görünmez (tıklama takibi bu durumda tek
+  sinyaldir); Gmail görselleri önbelleğe aldığı için açılma sayısı olduğundan az çıkabilir.
+  Yani "açılmadı" kesin bir bilgi değildir, "açıldı" kesindir.
+
+#### Alan adı gelmeden test etmek
+
+`.env` içine `TRACKING_DEV_LOCAL="1"` + `MAIL_TRACKING_URL="http://127.0.0.1:3000"` yazın.
+Zincirin tamamı yerelde çalışır; UI kırmızı **GELİŞTİRME MODU** uyarısı gösterir. Bu maillerdeki
+takip linkleri alıcının bilgisayarında çalışmaz — gerçek gönderim öncesi kaldırın.
+
 Uygulama dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; dışarıdan yalnızca takip
 pikseli, çıkış linki ve `/media` erişilebilir.
 

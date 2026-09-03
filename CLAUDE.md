@@ -89,12 +89,15 @@ Mailbot/
 |---|---|---|
 | `Company` | Bulunan/eklenen şirket | `email`, `domain`, `source` (n8n/manual/csv), `isEcommerce`, `isActive` |
 | `Campaign` | Mail şablonu + video | `subject`, `bodyTemplate`, `videoUrl`, `videoThumbPath` |
-| `Message` | Gönderilen tek mail | `status`, `trackingId`, `sentAt`, `openedAt`, `gmailThreadId` |
+| `Message` | Gönderilen tek mail | `status`, `trackingId`, `sentAt`, `openedAt`, `lastOpenedAt`, `openCount`, `firstClickAt`, `clickCount`, `gmailThreadId` |
+| `TrackEvent` | Tek açılma/tıklama olayı | `type` (OPEN/CLICK), `at`, `userAgent`, `isBot`, `reason` |
 | `Reply` | Gelen yanıt | `sentiment`, `sentimentScore`, `summary`, `discordNotifiedAt` |
 | `DiscoveryRun` | Bir arama çalıştırması | `prompt`, `status`, `resultCount` |
 | `Setting` | key/value ayarlar | gönderim limitleri, warm-up sayacı |
 
-**Yeşil/kırmızı kuralı:** `Message.openedAt == null` → kırmızı, dolu → yeşil. Ayrı bir alan tutma.
+**Yeşil/kırmızı kuralı:** `Message.openedAt == null` → kırmızı/tek tik, dolu → yeşil/çift tik.
+Ayrı bir alan tutma. `openedAt` yalnızca **gerçek** açılmalarda dolar; sahte açılma
+(`TrackEvent.isBot = true`) sayaçlara işlenmez.
 
 ---
 
@@ -153,7 +156,7 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - `lib/video.ts`: YouTube/Vimeo kapak indirme + ffmpeg ile play butonlu önizleme (play butonu PNG'si saf Node ile üretilir, harici bağımlılık yok). ffmpeg yoksa kapak görseli butonsuz kullanılır.
 - Uçlar: `/api/ai/improve`, `/api/messages` (liste + kuyruğu sürdür), `/api/messages/send`, `/api/track/[trackingId]`, `/api/unsubscribe/[trackingId]`, `/api/video/thumbnail`, `/media/[...file]`.
 - `/compose`: taslak → "AI ile iyileştir" (spam skoru + uyarılar) → video önizleme → seçili şirketlere kuyruklu gönderim. Onaylanan metinde şirket adı `{{company}}` değişkenine geri çevrilir.
-- **`PUBLIC_URL`:** takip pikseli ve görseller mailin içinden çağrıldığı için dışarıya açık bir adres gerekir (`cloudflared tunnel --url http://localhost:3000`). Boşsa `APP_URL` kullanılır ve açılma takibi çalışmaz.
+- **`MAIL_TRACKING_URL`:** takip pikseli ve görseller mailin içinden çağrıldığı için dışarıya açık bir adres gerekir. Yalnızca **kendi alan adınız** kabul edilir (`lib/env.ts` → `isTrustedMailUrl()`); tünel adresleri reddedilir. Boşsa takip kapanır ve mail pikselsiz/görselsiz gider. Kodda `PUBLIC_URL` diye bir anahtar yoktur.
 - ✅ Uçtan uca doğrulandı: test maili gelen kutusuna düştü (spam'e değil), Türkçe karakterler ve `List-Unsubscribe` başlığı doğru; tünel üzerinden çağrılan piksel kaydı yeşile çevirdi; çıkış linki şirketi pasifleştirdi.
 - ✅ ffmpeg ile play butonlu önizleme üretiliyor (ffmpeg PATH'te değilse `FFMPEG_PATH` ve winget klasörü de denenir).
 
@@ -179,7 +182,38 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - Groq serî kuyruğu + 429 retry (`lib/groq.ts`), n8n workflow JSON'ları repoda, README güncel.
 - Keşif kaydı 10 dakika içinde bitmezse zaman aşımına uğrar (n8n çökerse UI sonsuza kadar dönmez).
 - Yanıt gönderirken `In-Reply-To` başlığı okunamazsa gönderim yine yapılır (thread'e ekleme `threadId` ile çalışır).
-- **Erişim kuralı:** `PUBLIC_URL` ile uygulama dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; sadece `/api/track`, `/api/unsubscribe` ve `/media` dışarıdan erişilebilir.
+- **Erişim kuralı:** uygulama tünelle dışarı açıldığında iç uçlar `X-Internal-Key` olmadan çalışmaz; sadece `/api/track`, `/api/unsubscribe` ve `/media` dışarıdan erişilebilir.
+
+### ✅ Faz 10 — Açılma & tıklama takibi (tamamlandı)
+
+Mailtrack gibi eklentilerin yaptığı işin bizdeki karşılığı. **Mailtrack'in kendisi entegre
+edilemez:** herkese açık API'si/webhook'u yok ve pikseli yalnızca Gmail'in *web arayüzünde*
+compose ekranına enjekte ediyor — biz Gmail **API**'siyle gönderdiğimiz için eklenti bizim
+maillerimize hiç dokunmaz. Tek gerçek üstünlüğü pikseli itibarı temiz kendi alan adından
+servis etmesiydi; kendi alan adımız bağlanınca o üstünlük de kalmıyor.
+
+- `lib/tracking.ts` — tek merkez: sahte açılma filtresi, HMAC imzalı tıklama linki, olay yazımı.
+- `TrackEvent` modeli her açılma/tıklamayı ayrı satır olarak tutar (`isBot` olanlar dahil, ki
+  filtrenin ne elediği görülebilsin). `Message.openedAt/lastOpenedAt/openCount/firstClickAt/
+  clickCount` bunların özetidir.
+- Uçlar: `/api/track/[trackingId]` (piksel, açık), `/api/click/[trackingId]` (imzalı yönlendirme,
+  açık), `/api/tracking/pending` (GET/PATCH, iç).
+- `/inbox` → ✓ gönderildi · **✓✓** açıldı · 🔗 tıklandı; satır tıklanınca olay geçmişi açılır.
+  Takip kapalıyken sayfada bunun **neden** böyle olduğunu açıklayan uyarı çıkar.
+- Discord: ilk açılmada `📖 ... mailinizi açtı` bildirimi (mail başına bir kez), `!durum`'a
+  tıklanan sayısı.
+- **`GoogleImageProxy` ASLA bot listesine eklenmez** — Gmail görselleri kendi proxy'sinden çeker,
+  yani gerçek açılmanın ta kendisidir; elemek takibi tamamen öldürür.
+- **Tıklama linki imzasız olamaz.** İmzasız bir yönlendirici alan adımızı açık yönlendirmeye
+  (open redirect) çevirir; oltacıların aradığı tam olarak budur ve alan adı itibarını yakar.
+  İmza `APP_INTERNAL_API_KEY` ile HMAC-SHA256.
+- **`bodyHtml` kuyruğa alma anında donar.** Takip sonradan açılırsa kuyrukta bekleyen mailler
+  pikselsiz giderdi; `sendOne()` HTML'de `/api/track/` yoksa gövdeyi yeniden üretir.
+- **Yanlış negatif normaldir:** alıcı görselleri engellerse açılma hiç görünmez (tıklama tek
+  sinyal olur), Gmail önbelleği yüzünden açılma sayısı olduğundan az çıkabilir. "Açıldı" kesin,
+  "açılmadı" değildir.
+- Alan adı gelmeden test için: `TRACKING_DEV_LOCAL="1"` + `MAIL_TRACKING_URL="http://127.0.0.1:3000"`
+  (yalnızca `NODE_ENV != production`). UI kırmızı "GELİŞTİRME MODU" uyarısı gösterir.
 
 ---
 
@@ -193,7 +227,9 @@ Tüm iç endpoint'ler `X-Internal-Key: $APP_INTERNAL_API_KEY` ister.
 | `POST /api/n8n/companies` | n8n | `{ runId, companies: [...] }` → şirketleri kaydeder (domain'e göre upsert) |
 | `POST /api/jobs/sync-inbox` | n8n | Gmail yanıtlarını çeker, analiz eder |
 | `POST /api/messages/send` | UI | `{ campaignId, companyIds[] }` → kuyruğa alır |
-| `GET  /api/track/[trackingId]` | mail istemcisi | 1x1 PNG, `openedAt` yazar |
+| `GET  /api/track/[trackingId]` | mail istemcisi | 1x1 PNG, OPEN olayı yazar (auth yok) |
+| `GET  /api/click/[trackingId]?u=&s=` | alıcı | İmza doğrulanırsa CLICK yazıp hedefe 302 (auth yok) |
+| `GET/PATCH /api/tracking/pending` | bot | Bildirilmemiş açılmalar / damgalama |
 | `GET  /api/replies?sentiment=POSITIVE` | UI, bot | Yanıt listesi |
 | `POST /api/replies/[id]/answer` | bot, UI | `{ text }` → Groq ile düzeltir, thread'e yanıtlar |
 | `GET  /api/stats` | bot | Gönderilen/açılan/yanıtlanan sayıları |
@@ -225,7 +261,9 @@ Model `.env`'deki `GROQ_MODEL` ile seçilir.
 | `!durum` | `!durum` | Gönderilen / açılan / yanıtlanan / olumlu sayıları + kalan kota |
 | `!komutlar` | `!komutlar` | Komutların ne işe yaradığını ve nasıl yazılacağını anlatan bilgilendirme sayfası (`!yardim` / `!help` aynı işi yapar) |
 
-Bildirimler yalnızca `sentiment = POSITIVE` yanıtlar için gider.
+Bildirimler iki türlüdür: `sentiment = POSITIVE` yanıtlar ve bir mailin **ilk** açılması
+(`📖 ... mailinizi açtı`, mail başına bir kez). Nötr/olumsuz yanıtlar ve tekrar açılmalar
+bildirilmez — kanalı boğmamak için.
 
 `!mailcevap`'taki sayı **yanıt ID'sidir** (mesaj ID'si değil); bildirim embed'indeki "Yanıt ID"
 alanında ve `/inbox` sayfasında görünür. Olmayan bir ID yazılırsa bot geçerli ID'leri listeler,
@@ -249,8 +287,13 @@ alan adınızı verin.** Adres yoksa takip kendiliğinden kapanır ve mail temiz
 |---|---|---|
 | Takip pikseli | yok | var |
 | Video önizleme görseli | yok — videonun kendi adresine düz link | var |
+| Video/CTA linki | doğrudan YouTube adresi | `/api/click/...` üzerinden imzalı yönlendirme |
 | Çıkış | `List-Unsubscribe: <mailto:...>` + "yanıtlayıp çıkar yazın" | https link + One-Click |
-| Yeşil/kırmızı açılma | çalışmaz | çalışır |
+| Yeşil/kırmızı açılma (✓✓) | çalışmaz | çalışır |
+| Discord "mailiniz açıldı" | gelmez | ilk açılmada gelir |
+
+**Çıkış linki asla sarılmaz** — One-Click unsubscribe doğrudan çalışmalı, araya yönlendirme
+girmemeli.
 
 - [ ] Gönderim Gmail API üzerinden (SPF/DKIM/DMARC Google tarafından imzalanır).
 - [ ] Maildeki bağlantılar yalnızca itibarlı alan adlarına gitsin (kendi alan adınız,
@@ -292,6 +335,7 @@ alan adınızı verin.** Adres yoksa takip kendiliğinden kapanır ve mail temiz
 | `APP_INTERNAL_API_KEY` | Kendin üret (rastgele 32 karakter) | ✅ |
 | `GROQ_API_KEY` | console.groq.com → API Keys | ✅ |
 | `MAIL_TRACKING_URL` | **Kendi alan adınız** (`https://mail.alanadiniz.com`). Tünel adresleri reddedilir. Boşsa takip kapanır, mailler daha temiz gider | ➖ |
+| `TRACKING_DEV_LOCAL` | Yalnızca geliştirme: `"1"` iken `http://127.0.0.1:3000` takip adresi olarak kabul edilir. Üretimde boş bırakın | ➖ |
 | `CLOUDFLARE_TUNNEL_NAME` | Kalıcı tünel adı; doluysa `MailBot.bat` tüneli açar | ➖ |
 | `FFMPEG_PATH` / `CLOUDFLARED_PATH` | Araçlar PATH'te değilse tam yol (genelde gerekmez) | ➖ |
 | `GROQ_MODEL` | Groq model listesinden (varsayılan: `openai/gpt-oss-120b`) | ✅ |
@@ -322,7 +366,7 @@ npm run n8n:sync       # n8n/workflows içindeki JSON'ları n8n'e yükle (list/b
 npm run workflows      # workflow JSON'larını üret (elle düzenlemeyin)
 npm run gmail:auth     # Gmail refresh token üret
 npm run launcher       # masaüstüne MailBot.bat kısayolu yaz
-npm run tunnel         # cloudflared tüneli aç, PUBLIC_URL'i .env'ye yaz
+npm run tunnel         # cloudflared tüneli aç (geçici tünel yalnızca arayüze uzaktan bakmak için)
 docker compose -f infra/docker-compose.yml up -d   # SearXNG
 ```
 
