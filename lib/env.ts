@@ -71,6 +71,18 @@ export function isTrustedMailUrl(value: string): boolean {
   return !UNTRUSTED_MAIL_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`))
 }
 
+/**
+ * `localhost` yerine `127.0.0.1` kullanir.
+ *
+ * n8n (Node) `localhost`'u once IPv6 `::1` olarak cozer; Docker'in yayinladigi
+ * port veya `next dev` yalnizca IPv4 dinliyorsa istek `ECONNREFUSED ::1:PORT`
+ * ile duser. Bu adresler n8n'e govdeyle gectigi icin burada sabitlenir.
+ * `host.docker.internal` gibi diger adlar oldugu gibi birakilir.
+ */
+export function preferIPv4(url: string): string {
+  return url.replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, '$1127.0.0.1')
+}
+
 export const env = {
   appUrl: () => optionalEnv('APP_URL', 'http://localhost:3000'),
 

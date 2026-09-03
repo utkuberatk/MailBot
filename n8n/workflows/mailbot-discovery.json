@@ -41,7 +41,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Webhook govdesindeki bilgileri her sorguya tasi.\nconst body = $('Webhook').first().json.body || {};\nconst queries = $input.first().json.queries || [];\n\nreturn queries.map((query) => ({\n  json: {\n    query,\n    runId: body.runId,\n    appUrl: (body.appUrl || 'http://localhost:3000').replace(/\\/$/, ''),\n    searxngUrl: (body.searxngUrl || 'http://localhost:8080').replace(/\\/$/, ''),\n    limit: body.limit || 25,\n  },\n}));"
+        "jsCode": "// Webhook govdesindeki bilgileri her sorguya tasi.\nconst body = $('Webhook').first().json.body || {};\nconst queries = $input.first().json.queries || [];\n\n// n8n 'localhost'u once IPv6 (::1) olarak cozer; Docker portu ve next dev\n// yalnizca IPv4 dinledigi icin adresi sabitle.\nfunction toIPv4(url) {\n  return String(url)\n    .replace(/\\/+$/, '')\n    .replace(/^(https?:\\/\\/)localhost(?=[:\\/]|$)/i, '$1127.0.0.1');\n}\n\nreturn queries.map((query) => ({\n  json: {\n    query,\n    runId: body.runId,\n    appUrl: toIPv4(body.appUrl || 'http://127.0.0.1:3000'),\n    searxngUrl: toIPv4(body.searxngUrl || 'http://127.0.0.1:8080'),\n    limit: body.limit || 25,\n  },\n}));"
       },
       "id": "a1000000-0000-4000-8000-000000000003",
       "name": "Sorgulari Ayir",
@@ -88,7 +88,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Arama sonuclarini alan adina gore tekillestir, pazaryeri/sosyal medyayi ele.\nconst meta = $('Sorgulari Ayir').first().json;\nconst blocked = [\n  'trendyol.com','hepsiburada.com','n11.com','amazon.com','amazon.com.tr','ciceksepeti.com',\n  'gittigidiyor.com','sahibinden.com','dolap.com','letgo.com','instagram.com','facebook.com',\n  'twitter.com','x.com','linkedin.com','pinterest.com','youtube.com','tiktok.com','wikipedia.org',\n  'google.com','blogspot.com','wordpress.com','medium.com','shopify.com','ikas.com',\n  'ideasoft.com.tr','ticimax.com','etsy.com','eksisozluk.com','sikayetvar.com','hurriyet.com.tr',\n  'milliyet.com.tr','sozcu.com.tr','webrazzi.com','yemeksepeti.com','getir.com',\n];\n\nconst seen = new Set();\nconst out = [];\nconst limit = meta.limit || 25;\n\n// n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.\nfunction hostOf(value) {\n  const match = String(value || '').match(/^https?:\\/\\/([^/?#]+)/i);\n  if (!match) return '';\n  return match[1].toLowerCase().replace(/^www\\./, '').replace(/:\\d+$/, '');\n}\n\nfor (const item of $input.all()) {\n  for (const result of item.json.results || []) {\n    const host = hostOf(result.url);\n    if (!host || !host.includes('.') || seen.has(host)) continue;\n    if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;\n\n    seen.add(host);\n    out.push({\n      json: {\n        domain: host,\n        url: 'https://' + host + '/',\n        title: result.title || '',\n        snippet: result.content || '',\n        runId: meta.runId,\n        appUrl: meta.appUrl,\n      },\n    });\n    if (out.length >= limit) return out;\n  }\n}\n\nreturn out;"
+        "jsCode": "// Arama sonuclarini alan adina gore tekillestir, pazaryeri/sosyal medyayi ele.\nconst meta = $('Sorgulari Ayir').first().json;\nconst blocked = [\n  'trendyol.com','hepsiburada.com','n11.com','amazon.com','amazon.com.tr','ciceksepeti.com',\n  'gittigidiyor.com','sahibinden.com','dolap.com','letgo.com','instagram.com','facebook.com',\n  'twitter.com','x.com','linkedin.com','pinterest.com','youtube.com','tiktok.com','wikipedia.org',\n  'google.com','blogspot.com','wordpress.com','medium.com','shopify.com','ikas.com',\n  'ideasoft.com.tr','ticimax.com','etsy.com','eksisozluk.com','sikayetvar.com','hurriyet.com.tr',\n  'milliyet.com.tr','sozcu.com.tr','webrazzi.com','yemeksepeti.com','getir.com',\n];\n\nconst seen = new Set();\nconst out = [];\nconst errors = [];\nlet resultTotal = 0;\nconst limit = meta.limit || 25;\n\n// n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.\nfunction hostOf(value) {\n  const match = String(value || '').match(/^https?:\\/\\/([^/?#]+)/i);\n  if (!match) return '';\n  return match[1].toLowerCase().replace(/^www\\./, '').replace(/:\\d+$/, '');\n}\n\nfor (const item of $input.all()) {\n  // SearXNG'e ulasilamazsa HTTP node hatayi item olarak gecirir\n  // (onError: continueRegularOutput) — sebebi topla, sessizce yutma.\n  if (item.json && item.json.error) {\n    const err = item.json.error;\n    errors.push(String((err && err.message) || err));\n    continue;\n  }\n\n  const results = (item.json && item.json.results) || [];\n  resultTotal += results.length;\n\n  for (const result of results) {\n    const host = hostOf(result.url);\n    if (!host || !host.includes('.') || seen.has(host)) continue;\n    if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;\n\n    seen.add(host);\n    out.push({\n      json: {\n        ok: true,\n        domain: host,\n        url: 'https://' + host + '/',\n        title: result.title || '',\n        snippet: result.content || '',\n        runId: meta.runId,\n        appUrl: meta.appUrl,\n      },\n    });\n    if (out.length >= limit) return out;\n  }\n}\n\nif (out.length > 0) return out;\n\n// Aday yoksa zincir burada biterdi ve kayit \"Calisiyor\" olarak asili kalirdi.\n// Bunun yerine \"Aday Var mi\" IF node'unu FALSE dalina sokan bir bitirme\n// item'i uret; boylece sebep kullaniciya kadar ulasir.\nconst unique = [...new Set(errors)];\nconst reason = unique.length\n  ? 'SearXNG sorgulari basarisiz oldu: ' + unique.join(' | ') +\n    ' — SearXNG kapali olabilir: docker compose -f infra/docker-compose.yml up -d'\n  : 'SearXNG ' + resultTotal + ' sonuc dondurdu ama hicbiri uygun sirket sitesi degildi ' +\n    '(pazaryeri/sosyal medya elendi). Daha genel bir prompt deneyin.';\n\nreturn [\n  {\n    json: { ok: false, runId: meta.runId, appUrl: meta.appUrl, status: 'FAILED', error: reason },\n  },\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000005",
       "name": "Aday Siteleri Cikar",
@@ -96,6 +96,41 @@
       "typeVersion": 2,
       "position": [
         480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1000000-0000-4000-8000-000000000013-ok",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000013",
+      "name": "Aday Var mi",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
         0
       ]
     },
@@ -131,8 +166,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        700,
-        0
+        920,
+        -160
       ],
       "onError": "continueRegularOutput"
     },
@@ -168,22 +203,57 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        920,
-        0
+        1140,
+        -160
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Ana sayfa + iletisim sayfasi HTML'inden e-posta, telefon ve metin cikar.\nconst candidates = $('Aday Siteleri Cikar').all();\nconst homepages = $('Ana Sayfayi Getir').all();\nconst contactPages = $input.all();\n\nconst junk = ['noreply','no-reply','donotreply','example.com','example.org','sentry.io','wixpress',\n  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite',\n  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.\n  'eticaretsitesi.com','ideasoft.com.tr','ticimax.com','ikas.com','shopify.com','wix.com',\n  'platinmarket.com','projesoft.com.tr','tsoft.com.tr','sentry-next'];\n\n// &amp; ve \\u003e gibi kacis dizilerini coz — regex bunlari e-postaya yapistirabiliyor.\nfunction decodeEntities(value) {\n  return String(value)\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#0?39;|&apos;/gi, \"'\")\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/\\\\u00([0-9a-f]{2})/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)));\n}\n\n/** Sayfa basligindan kullanilabilir bir sirket adi cikarir. */\nfunction cleanTitle(value) {\n  const title = decodeEntities(value)\n    // Uzun tireleri sadelestir, sonra ayiricilara gore ilk parcayi al.\n    .replace(/[\\u2013\\u2014]/g, '-')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  // \"Marka | Slogan\" veya \"Marka - Slogan\" kaliplarinda ilk anlamli parcayi al.\n  const parts = title.split(/\\s*\\|\\s*|\\s+-\\s+/).map((p) => p.trim()).filter(Boolean);\n  const name = parts.length > 1 && parts[0].length >= 3 ? parts[0] : title;\n\n  return name.replace(/^[\\s|-]+|[\\s|-]+$/g, '').slice(0, 80);\n}\n\nconst EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst PHONE_RE = /(?:\\+90|0)[\\s(]*\\d{3}[\\s)]*\\d{3}[\\s.-]*\\d{2}[\\s.-]*\\d{2}/g;\n\nfunction htmlOf(entry) {\n  if (!entry) return '';\n  const value = entry.json && entry.json.data;\n  return typeof value === 'string' ? value : '';\n}\n\nfunction toText(html) {\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst out = [];\n\nfor (let i = 0; i < candidates.length; i++) {\n  const base = candidates[i].json;\n  const html = htmlOf(homepages[i]) + ' ' + htmlOf(contactPages[i]);\n  if (!html.trim()) continue;\n\n  const text = toText(html);\n\n  // E-posta: once alan adiyla eslesenler.\n  const emails = [...new Set((decodeEntities(html).match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]\n    .filter((e) => !junk.some((j) => e.includes(j)))\n    .sort((a, b) => {\n      const aOwn = a.endsWith('@' + base.domain) ? 0 : 1;\n      const bOwn = b.endsWith('@' + base.domain) ? 0 : 1;\n      return aOwn - bOwn;\n    });\n\n  const phones = [...new Set((text.match(PHONE_RE) || []).map((p) => p.replace(/\\s+/g, ' ').trim()))];\n\n  const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\n  out.push({\n    json: {\n      domain: base.domain,\n      website: base.url,\n      runId: base.runId,\n      appUrl: base.appUrl,\n      title: cleanTitle(titleMatch ? titleMatch[1] : base.title) || base.domain,\n      email: emails[0] || null,\n      allEmails: emails.slice(0, 5),\n      phone: phones[0] || null,\n      text: text.slice(0, 3000),\n      snippet: base.snippet,\n    },\n  });\n}\n\nreturn out;"
+        "jsCode": "// Ana sayfa + iletisim sayfasi HTML'inden e-posta, telefon ve metin cikar.\nconst candidates = $('Aday Siteleri Cikar').all();\nconst homepages = $('Ana Sayfayi Getir').all();\nconst contactPages = $input.all();\n\nconst junk = ['noreply','no-reply','donotreply','example.com','example.org','sentry.io','wixpress',\n  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite',\n  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.\n  'eticaretsitesi.com','ideasoft.com.tr','ticimax.com','ikas.com','shopify.com','wix.com',\n  'platinmarket.com','projesoft.com.tr','tsoft.com.tr','sentry-next'];\n\n// &amp; ve \\u003e gibi kacis dizilerini coz — regex bunlari e-postaya yapistirabiliyor.\nfunction decodeEntities(value) {\n  return String(value)\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#0?39;|&apos;/gi, \"'\")\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/\\\\u00([0-9a-f]{2})/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)));\n}\n\n/** Sayfa basligindan kullanilabilir bir sirket adi cikarir. */\nfunction cleanTitle(value) {\n  const title = decodeEntities(value)\n    // Uzun tireleri sadelestir, sonra ayiricilara gore ilk parcayi al.\n    .replace(/[\\u2013\\u2014]/g, '-')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  // \"Marka | Slogan\" veya \"Marka - Slogan\" kaliplarinda ilk anlamli parcayi al.\n  const parts = title.split(/\\s*\\|\\s*|\\s+-\\s+/).map((p) => p.trim()).filter(Boolean);\n  const name = parts.length > 1 && parts[0].length >= 3 ? parts[0] : title;\n\n  return name.replace(/^[\\s|-]+|[\\s|-]+$/g, '').slice(0, 80);\n}\n\nconst EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst PHONE_RE = /(?:\\+90|0)[\\s(]*\\d{3}[\\s)]*\\d{3}[\\s.-]*\\d{2}[\\s.-]*\\d{2}/g;\n\nfunction htmlOf(entry) {\n  if (!entry) return '';\n  const value = entry.json && entry.json.data;\n  return typeof value === 'string' ? value : '';\n}\n\nfunction toText(html) {\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst out = [];\n\nfor (let i = 0; i < candidates.length; i++) {\n  const base = candidates[i].json;\n  const html = htmlOf(homepages[i]) + ' ' + htmlOf(contactPages[i]);\n  if (!html.trim()) continue;\n\n  const text = toText(html);\n\n  // E-posta: once alan adiyla eslesenler.\n  const emails = [...new Set((decodeEntities(html).match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]\n    .filter((e) => !junk.some((j) => e.includes(j)))\n    .sort((a, b) => {\n      const aOwn = a.endsWith('@' + base.domain) ? 0 : 1;\n      const bOwn = b.endsWith('@' + base.domain) ? 0 : 1;\n      return aOwn - bOwn;\n    });\n\n  const phones = [...new Set((text.match(PHONE_RE) || []).map((p) => p.replace(/\\s+/g, ' ').trim()))];\n\n  const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\n  out.push({\n    json: {\n      ok: true,\n      domain: base.domain,\n      website: base.url,\n      runId: base.runId,\n      appUrl: base.appUrl,\n      title: cleanTitle(titleMatch ? titleMatch[1] : base.title) || base.domain,\n      email: emails[0] || null,\n      allEmails: emails.slice(0, 5),\n      phone: phones[0] || null,\n      text: text.slice(0, 3000),\n      snippet: base.snippet,\n    },\n  });\n}\n\nif (out.length > 0) return out;\n\n// Hicbir siteden icerik alinamadi — kaydi acik birakmadan sebebi bildir.\nconst meta = candidates[0] ? candidates[0].json : {};\n\nreturn [\n  {\n    json: {\n      ok: false,\n      runId: meta.runId,\n      appUrl: meta.appUrl,\n      status: 'FAILED',\n      error:\n        'Bulunan ' + candidates.length + ' sitenin hicbirine erisilemedi ' +\n        '(zaman asimi, sertifika hatasi veya bot engeli). Farkli bir prompt deneyin.',\n    },\n  },\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000008",
       "name": "Iletisim Bilgisi Cikar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1140,
-        0
+        1360,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1000000-0000-4000-8000-000000000014-ok",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000014",
+      "name": "Iletisim Var mi",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1580,
+        -160
       ]
     },
     {
@@ -202,22 +272,22 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1360,
-        0
+        1800,
+        -280
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// Siniflandirma sonucunu iletisim bilgisiyle birlestir, kayit listesini hazirla.\nconst extracted = $('Iletisim Bilgisi Cikar').all();\nconst classified = $input.all();\n\nconst companies = [];\n\nfor (let i = 0; i < extracted.length; i++) {\n  const info = extracted[i].json;\n  const ai = (classified[i] && classified[i].json) || {};\n\n  // E-ticaret olmadigi net olan siteleri listeye alma.\n  if (ai.isEcommerce === false) continue;\n\n  companies.push({\n    name: ai.name || info.title || info.domain,\n    domain: info.domain,\n    website: info.website,\n    email: info.email,\n    phone: info.phone,\n    city: ai.city || null,\n    sector: ai.sector || null,\n    score: typeof ai.confidence === 'number' ? ai.confidence : null,\n    isEcommerce: ai.isEcommerce !== false,\n    rawSnippet: (info.snippet || info.text || '').slice(0, 500),\n  });\n}\n\nconst first = extracted[0] ? extracted[0].json : {};\n\nreturn [\n  {\n    json: {\n      runId: first.runId,\n      appUrl: first.appUrl,\n      count: companies.length,\n      companies,\n    },\n  },\n];"
+        "jsCode": "// Siniflandirma sonucunu iletisim bilgisiyle birlestir, kayit listesini hazirla.\nconst extracted = $('Iletisim Bilgisi Cikar').all();\nconst classified = $input.all();\n\nconst companies = [];\n\nfor (let i = 0; i < extracted.length; i++) {\n  const info = extracted[i].json;\n  const ai = (classified[i] && classified[i].json) || {};\n\n  // E-ticaret olmadigi net olan siteleri listeye alma.\n  if (ai.isEcommerce === false) continue;\n\n  companies.push({\n    name: ai.name || info.title || info.domain,\n    domain: info.domain,\n    website: info.website,\n    email: info.email,\n    phone: info.phone,\n    city: ai.city || null,\n    sector: ai.sector || null,\n    score: typeof ai.confidence === 'number' ? ai.confidence : null,\n    isEcommerce: ai.isEcommerce !== false,\n    rawSnippet: (info.snippet || info.text || '').slice(0, 500),\n  });\n}\n\nconst first = extracted[0] ? extracted[0].json : {};\n\nreturn [\n  {\n    json: {\n      ok: true,\n      runId: first.runId,\n      appUrl: first.appUrl,\n      count: companies.length,\n      companies,\n    },\n  },\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000010",
       "name": "Kayitlari Hazirla",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1580,
-        0
+        2020,
+        -280
       ]
     },
     {
@@ -236,18 +306,31 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1800,
-        0
+        2240,
+        -280
       ],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
+        "jsCode": "// Kayit adiminin sonucunu tek bir \"bitirme\" item'ina indirger.\nconst prepared = $('Kayitlari Hazirla').first().json;\nconst response = $input.first().json || {};\n\n// HTTP node hatayi item olarak gecirir (onError: continueRegularOutput).\nconst failure = response.error ? String(response.error.message || response.error) : null;\n\nreturn [\n  {\n    json: {\n      runId: prepared.runId,\n      appUrl: prepared.appUrl,\n      status: failure ? 'FAILED' : 'DONE',\n      error: failure ? 'Sirketler kaydedilemedi: ' + failure : null,\n    },\n  },\n];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000015",
+      "name": "Sonucu Ozetle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        -280
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "={{ $('Kayitlari Hazirla').first().json.appUrl }}/api/n8n/runs/finish",
+        "url": "={{ $json.appUrl }}/api/n8n/runs/finish",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ runId: $('Kayitlari Hazirla').first().json.runId, status: 'DONE' }) }}",
+        "jsonBody": "={{ JSON.stringify({ runId: $json.runId, status: $json.status || 'DONE', error: $json.error || null }) }}",
         "options": {
           "timeout": 30000
         }
@@ -257,7 +340,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2020,
+        2680,
         0
       ],
       "onError": "continueRegularOutput"
@@ -312,7 +395,25 @@
       "main": [
         [
           {
+            "node": "Aday Var mi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aday Var mi": {
+      "main": [
+        [
+          {
             "node": "Ana Sayfayi Getir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kesfi Bitir",
             "type": "main",
             "index": 0
           }
@@ -345,7 +446,25 @@
       "main": [
         [
           {
+            "node": "Iletisim Var mi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iletisim Var mi": {
+      "main": [
+        [
+          {
             "node": "Sirketi Siniflandir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kesfi Bitir",
             "type": "main",
             "index": 0
           }
@@ -375,6 +494,17 @@
       ]
     },
     "Sirketleri Kaydet": {
+      "main": [
+        [
+          {
+            "node": "Sonucu Ozetle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sonucu Ozetle": {
       "main": [
         [
           {

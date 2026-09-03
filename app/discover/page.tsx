@@ -49,9 +49,12 @@ export default function DiscoverPage() {
     }
   }, [run])
 
+  const busy = starting || run?.status === 'RUNNING'
+
   async function start(event: React.FormEvent) {
     event.preventDefault()
-    if (!prompt.trim() || starting) return
+    // Calisan bir kesif varken ikinci kayit acilmasin (cift tiklama korumasi).
+    if (!prompt.trim() || busy) return
 
     setStarting(true)
     setError(null)
@@ -92,10 +95,10 @@ export default function DiscoverPage() {
           />
           <button
             type="submit"
-            disabled={starting || !prompt.trim()}
+            disabled={busy || !prompt.trim()}
             className="rounded-lg bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {starting ? 'Başlatılıyor…' : 'Keşfet'}
+            {starting ? 'Başlatılıyor…' : run?.status === 'RUNNING' ? 'Aranıyor…' : 'Keşfet'}
           </button>
         </form>
 

@@ -1,0 +1,849 @@
+{
+  "id": "TNNVQsOcbfkq3gYr",
+  "name": "mailbot-discovery",
+  "description": null,
+  "active": true,
+  "activeVersionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+  "createdAt": "2026-09-02T20:15:12.654Z",
+  "updatedAt": "2026-09-02T20:58:40.031Z",
+  "isArchived": false,
+  "versionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+  "versionCounter": 4,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mailbot-discovery",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ],
+      "webhookId": "mailbot-discovery"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.body.appUrl }}/api/ai/queries",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prompt: $json.body.prompt }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Sorgu Uret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Webhook govdesindeki bilgileri her sorguya tasi.\nconst body = $('Webhook').first().json.body || {};\nconst queries = $input.first().json.queries || [];\n\nreturn queries.map((query) => ({\n  json: {\n    query,\n    runId: body.runId,\n    appUrl: (body.appUrl || 'http://localhost:3000').replace(/\\/$/, ''),\n    searxngUrl: (body.searxngUrl || 'http://localhost:8080').replace(/\\/$/, ''),\n    limit: body.limit || 25,\n  },\n}));"
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Sorgulari Ayir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.searxngUrl }}/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "language",
+              "value": "tr-TR"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "SearXNG Ara",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arama sonuclarini alan adina gore tekillestir, pazaryeri/sosyal medyayi ele.\nconst meta = $('Sorgulari Ayir').first().json;\nconst blocked = [\n  'trendyol.com','hepsiburada.com','n11.com','amazon.com','amazon.com.tr','ciceksepeti.com',\n  'gittigidiyor.com','sahibinden.com','dolap.com','letgo.com','instagram.com','facebook.com',\n  'twitter.com','x.com','linkedin.com','pinterest.com','youtube.com','tiktok.com','wikipedia.org',\n  'google.com','blogspot.com','wordpress.com','medium.com','shopify.com','ikas.com',\n  'ideasoft.com.tr','ticimax.com','etsy.com','eksisozluk.com','sikayetvar.com','hurriyet.com.tr',\n  'milliyet.com.tr','sozcu.com.tr','webrazzi.com','yemeksepeti.com','getir.com',\n];\n\nconst seen = new Set();\nconst out = [];\nconst limit = meta.limit || 25;\n\n// n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.\nfunction hostOf(value) {\n  const match = String(value || '').match(/^https?:\\/\\/([^/?#]+)/i);\n  if (!match) return '';\n  return match[1].toLowerCase().replace(/^www\\./, '').replace(/:\\d+$/, '');\n}\n\nfor (const item of $input.all()) {\n  for (const result of item.json.results || []) {\n    const host = hostOf(result.url);\n    if (!host || !host.includes('.') || seen.has(host)) continue;\n    if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;\n\n    seen.add(host);\n    out.push({\n      json: {\n        domain: host,\n        url: 'https://' + host + '/',\n        title: result.title || '',\n        snippet: result.content || '',\n        runId: meta.runId,\n        appUrl: meta.appUrl,\n      },\n    });\n    if (out.length >= limit) return out;\n  }\n}\n\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Aday Siteleri Cikar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Ana Sayfayi Getir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Aday Siteleri Cikar').item.json.url }}iletisim",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Iletisim Sayfasini Getir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ana sayfa + iletisim sayfasi HTML'inden e-posta, telefon ve metin cikar.\nconst candidates = $('Aday Siteleri Cikar').all();\nconst homepages = $('Ana Sayfayi Getir').all();\nconst contactPages = $input.all();\n\nconst junk = ['noreply','no-reply','donotreply','example.com','example.org','sentry.io','wixpress',\n  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite',\n  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.\n  'eticaretsitesi.com','ideasoft.com.tr','ticimax.com','ikas.com','shopify.com','wix.com',\n  'platinmarket.com','projesoft.com.tr','tsoft.com.tr','sentry-next'];\n\n// &amp; ve \\u003e gibi kacis dizilerini coz — regex bunlari e-postaya yapistirabiliyor.\nfunction decodeEntities(value) {\n  return String(value)\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#0?39;|&apos;/gi, \"'\")\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/\\\\u00([0-9a-f]{2})/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)));\n}\n\n/** Sayfa basligindan kullanilabilir bir sirket adi cikarir. */\nfunction cleanTitle(value) {\n  const title = decodeEntities(value)\n    // Uzun tireleri sadelestir, sonra ayiricilara gore ilk parcayi al.\n    .replace(/[\\u2013\\u2014]/g, '-')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  // \"Marka | Slogan\" veya \"Marka - Slogan\" kaliplarinda ilk anlamli parcayi al.\n  const parts = title.split(/\\s*\\|\\s*|\\s+-\\s+/).map((p) => p.trim()).filter(Boolean);\n  const name = parts.length > 1 && parts[0].length >= 3 ? parts[0] : title;\n\n  return name.replace(/^[\\s|-]+|[\\s|-]+$/g, '').slice(0, 80);\n}\n\nconst EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst PHONE_RE = /(?:\\+90|0)[\\s(]*\\d{3}[\\s)]*\\d{3}[\\s.-]*\\d{2}[\\s.-]*\\d{2}/g;\n\nfunction htmlOf(entry) {\n  if (!entry) return '';\n  const value = entry.json && entry.json.data;\n  return typeof value === 'string' ? value : '';\n}\n\nfunction toText(html) {\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst out = [];\n\nfor (let i = 0; i < candidates.length; i++) {\n  const base = candidates[i].json;\n  const html = htmlOf(homepages[i]) + ' ' + htmlOf(contactPages[i]);\n  if (!html.trim()) continue;\n\n  const text = toText(html);\n\n  // E-posta: once alan adiyla eslesenler.\n  const emails = [...new Set((decodeEntities(html).match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]\n    .filter((e) => !junk.some((j) => e.includes(j)))\n    .sort((a, b) => {\n      const aOwn = a.endsWith('@' + base.domain) ? 0 : 1;\n      const bOwn = b.endsWith('@' + base.domain) ? 0 : 1;\n      return aOwn - bOwn;\n    });\n\n  const phones = [...new Set((text.match(PHONE_RE) || []).map((p) => p.replace(/\\s+/g, ' ').trim()))];\n\n  const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\n  out.push({\n    json: {\n      domain: base.domain,\n      website: base.url,\n      runId: base.runId,\n      appUrl: base.appUrl,\n      title: cleanTitle(titleMatch ? titleMatch[1] : base.title) || base.domain,\n      email: emails[0] || null,\n      allEmails: emails.slice(0, 5),\n      phone: phones[0] || null,\n      text: text.slice(0, 3000),\n      snippet: base.snippet,\n    },\n  });\n}\n\nreturn out;"
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Iletisim Bilgisi Cikar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.appUrl }}/api/ai/classify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ domain: $json.domain, title: $json.title, text: $json.text }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Sirketi Siniflandir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Siniflandirma sonucunu iletisim bilgisiyle birlestir, kayit listesini hazirla.\nconst extracted = $('Iletisim Bilgisi Cikar').all();\nconst classified = $input.all();\n\nconst companies = [];\n\nfor (let i = 0; i < extracted.length; i++) {\n  const info = extracted[i].json;\n  const ai = (classified[i] && classified[i].json) || {};\n\n  // E-ticaret olmadigi net olan siteleri listeye alma.\n  if (ai.isEcommerce === false) continue;\n\n  companies.push({\n    name: ai.name || info.title || info.domain,\n    domain: info.domain,\n    website: info.website,\n    email: info.email,\n    phone: info.phone,\n    city: ai.city || null,\n    sector: ai.sector || null,\n    score: typeof ai.confidence === 'number' ? ai.confidence : null,\n    isEcommerce: ai.isEcommerce !== false,\n    rawSnippet: (info.snippet || info.text || '').slice(0, 500),\n  });\n}\n\nconst first = extracted[0] ? extracted[0].json : {};\n\nreturn [\n  {\n    json: {\n      runId: first.runId,\n      appUrl: first.appUrl,\n      count: companies.length,\n      companies,\n    },\n  },\n];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000010",
+      "name": "Kayitlari Hazirla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.appUrl }}/api/n8n/companies",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $json.runId, companies: $json.companies }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000011",
+      "name": "Sirketleri Kaydet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Kayitlari Hazirla').first().json.appUrl }}/api/n8n/runs/finish",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ runId: $('Kayitlari Hazirla').first().json.runId, status: 'DONE' }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000012",
+      "name": "Kesfi Bitir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sorgu Uret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sorgu Uret": {
+      "main": [
+        [
+          {
+            "node": "Sorgulari Ayir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sorgulari Ayir": {
+      "main": [
+        [
+          {
+            "node": "SearXNG Ara",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SearXNG Ara": {
+      "main": [
+        [
+          {
+            "node": "Aday Siteleri Cikar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aday Siteleri Cikar": {
+      "main": [
+        [
+          {
+            "node": "Ana Sayfayi Getir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ana Sayfayi Getir": {
+      "main": [
+        [
+          {
+            "node": "Iletisim Sayfasini Getir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iletisim Sayfasini Getir": {
+      "main": [
+        [
+          {
+            "node": "Iletisim Bilgisi Cikar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iletisim Bilgisi Cikar": {
+      "main": [
+        [
+          {
+            "node": "Sirketi Siniflandir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sirketi Siniflandir": {
+      "main": [
+        [
+          {
+            "node": "Kayitlari Hazirla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kayitlari Hazirla": {
+      "main": [
+        [
+          {
+            "node": "Sirketleri Kaydet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sirketleri Kaydet": {
+      "main": [
+        [
+          {
+            "node": "Kesfi Bitir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "TNNVQsOcbfkq3gYr",
+      "projectId": "x8wBI9XSNBGZNa9l",
+      "project": {
+        "id": "x8wBI9XSNBGZNa9l",
+        "name": "Utku Berat Kayıkcı <utkuberat.contact@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T16:31:22.613Z",
+        "updatedAt": "2026-08-31T16:32:28.663Z"
+      },
+      "createdAt": "2026-09-02T20:15:12.660Z",
+      "updatedAt": "2026-09-02T20:15:12.660Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+    "workflowId": "TNNVQsOcbfkq3gYr",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "mailbot-discovery",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "a1000000-0000-4000-8000-000000000001",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -400,
+          0
+        ],
+        "webhookId": "mailbot-discovery"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.body.appUrl }}/api/ai/queries",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ prompt: $json.body.prompt }) }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000002",
+        "name": "Sorgu Uret",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -180,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "// Webhook govdesindeki bilgileri her sorguya tasi.\nconst body = $('Webhook').first().json.body || {};\nconst queries = $input.first().json.queries || [];\n\nreturn queries.map((query) => ({\n  json: {\n    query,\n    runId: body.runId,\n    appUrl: (body.appUrl || 'http://localhost:3000').replace(/\\/$/, ''),\n    searxngUrl: (body.searxngUrl || 'http://localhost:8080').replace(/\\/$/, ''),\n    limit: body.limit || 25,\n  },\n}));"
+        },
+        "id": "a1000000-0000-4000-8000-000000000003",
+        "name": "Sorgulari Ayir",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          40,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.searxngUrl }}/search",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "q",
+                "value": "={{ $json.query }}"
+              },
+              {
+                "name": "format",
+                "value": "json"
+              },
+              {
+                "name": "language",
+                "value": "tr-TR"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000004",
+        "name": "SearXNG Ara",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          260,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Arama sonuclarini alan adina gore tekillestir, pazaryeri/sosyal medyayi ele.\nconst meta = $('Sorgulari Ayir').first().json;\nconst blocked = [\n  'trendyol.com','hepsiburada.com','n11.com','amazon.com','amazon.com.tr','ciceksepeti.com',\n  'gittigidiyor.com','sahibinden.com','dolap.com','letgo.com','instagram.com','facebook.com',\n  'twitter.com','x.com','linkedin.com','pinterest.com','youtube.com','tiktok.com','wikipedia.org',\n  'google.com','blogspot.com','wordpress.com','medium.com','shopify.com','ikas.com',\n  'ideasoft.com.tr','ticimax.com','etsy.com','eksisozluk.com','sikayetvar.com','hurriyet.com.tr',\n  'milliyet.com.tr','sozcu.com.tr','webrazzi.com','yemeksepeti.com','getir.com',\n];\n\nconst seen = new Set();\nconst out = [];\nconst limit = meta.limit || 25;\n\n// n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.\nfunction hostOf(value) {\n  const match = String(value || '').match(/^https?:\\/\\/([^/?#]+)/i);\n  if (!match) return '';\n  return match[1].toLowerCase().replace(/^www\\./, '').replace(/:\\d+$/, '');\n}\n\nfor (const item of $input.all()) {\n  for (const result of item.json.results || []) {\n    const host = hostOf(result.url);\n    if (!host || !host.includes('.') || seen.has(host)) continue;\n    if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;\n\n    seen.add(host);\n    out.push({\n      json: {\n        domain: host,\n        url: 'https://' + host + '/',\n        title: result.title || '',\n        snippet: result.content || '',\n        runId: meta.runId,\n        appUrl: meta.appUrl,\n      },\n    });\n    if (out.length >= limit) return out;\n  }\n}\n\nreturn out;"
+        },
+        "id": "a1000000-0000-4000-8000-000000000005",
+        "name": "Aday Siteleri Cikar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000,
+            "redirect": {
+              "redirect": {
+                "followRedirects": true
+              }
+            },
+            "response": {
+              "response": {
+                "responseFormat": "text",
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000006",
+        "name": "Ana Sayfayi Getir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          700,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "url": "={{ $('Aday Siteleri Cikar').item.json.url }}iletisim",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "User-Agent",
+                "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 15000,
+            "redirect": {
+              "redirect": {
+                "followRedirects": true
+              }
+            },
+            "response": {
+              "response": {
+                "responseFormat": "text",
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000007",
+        "name": "Iletisim Sayfasini Getir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          920,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Ana sayfa + iletisim sayfasi HTML'inden e-posta, telefon ve metin cikar.\nconst candidates = $('Aday Siteleri Cikar').all();\nconst homepages = $('Ana Sayfayi Getir').all();\nconst contactPages = $input.all();\n\nconst junk = ['noreply','no-reply','donotreply','example.com','example.org','sentry.io','wixpress',\n  'yourdomain','domain.com','.png','.jpg','.jpeg','.gif','.webp','.svg','@2x','yoursite',\n  // Altyapi saglayicilarinin sablon adresleri — sirkete ait degil.\n  'eticaretsitesi.com','ideasoft.com.tr','ticimax.com','ikas.com','shopify.com','wix.com',\n  'platinmarket.com','projesoft.com.tr','tsoft.com.tr','sentry-next'];\n\n// &amp; ve \\u003e gibi kacis dizilerini coz — regex bunlari e-postaya yapistirabiliyor.\nfunction decodeEntities(value) {\n  return String(value)\n    .replace(/&nbsp;/gi, ' ')\n    .replace(/&amp;/gi, '&')\n    .replace(/&quot;/gi, '\"')\n    .replace(/&#0?39;|&apos;/gi, \"'\")\n    .replace(/&lt;/gi, '<')\n    .replace(/&gt;/gi, '>')\n    .replace(/\\\\u00([0-9a-f]{2})/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)));\n}\n\n/** Sayfa basligindan kullanilabilir bir sirket adi cikarir. */\nfunction cleanTitle(value) {\n  const title = decodeEntities(value)\n    // Uzun tireleri sadelestir, sonra ayiricilara gore ilk parcayi al.\n    .replace(/[\\u2013\\u2014]/g, '-')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  // \"Marka | Slogan\" veya \"Marka - Slogan\" kaliplarinda ilk anlamli parcayi al.\n  const parts = title.split(/\\s*\\|\\s*|\\s+-\\s+/).map((p) => p.trim()).filter(Boolean);\n  const name = parts.length > 1 && parts[0].length >= 3 ? parts[0] : title;\n\n  return name.replace(/^[\\s|-]+|[\\s|-]+$/g, '').slice(0, 80);\n}\n\nconst EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst PHONE_RE = /(?:\\+90|0)[\\s(]*\\d{3}[\\s)]*\\d{3}[\\s.-]*\\d{2}[\\s.-]*\\d{2}/g;\n\nfunction htmlOf(entry) {\n  if (!entry) return '';\n  const value = entry.json && entry.json.data;\n  return typeof value === 'string' ? value : '';\n}\n\nfunction toText(html) {\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst out = [];\n\nfor (let i = 0; i < candidates.length; i++) {\n  const base = candidates[i].json;\n  const html = htmlOf(homepages[i]) + ' ' + htmlOf(contactPages[i]);\n  if (!html.trim()) continue;\n\n  const text = toText(html);\n\n  // E-posta: once alan adiyla eslesenler.\n  const emails = [...new Set((decodeEntities(html).match(EMAIL_RE) || []).map((e) => e.toLowerCase()))]\n    .filter((e) => !junk.some((j) => e.includes(j)))\n    .sort((a, b) => {\n      const aOwn = a.endsWith('@' + base.domain) ? 0 : 1;\n      const bOwn = b.endsWith('@' + base.domain) ? 0 : 1;\n      return aOwn - bOwn;\n    });\n\n  const phones = [...new Set((text.match(PHONE_RE) || []).map((p) => p.replace(/\\s+/g, ' ').trim()))];\n\n  const titleMatch = html.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\n  out.push({\n    json: {\n      domain: base.domain,\n      website: base.url,\n      runId: base.runId,\n      appUrl: base.appUrl,\n      title: cleanTitle(titleMatch ? titleMatch[1] : base.title) || base.domain,\n      email: emails[0] || null,\n      allEmails: emails.slice(0, 5),\n      phone: phones[0] || null,\n      text: text.slice(0, 3000),\n      snippet: base.snippet,\n    },\n  });\n}\n\nreturn out;"
+        },
+        "id": "a1000000-0000-4000-8000-000000000008",
+        "name": "Iletisim Bilgisi Cikar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1140,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.appUrl }}/api/ai/classify",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ domain: $json.domain, title: $json.title, text: $json.text }) }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000009",
+        "name": "Sirketi Siniflandir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1360,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Siniflandirma sonucunu iletisim bilgisiyle birlestir, kayit listesini hazirla.\nconst extracted = $('Iletisim Bilgisi Cikar').all();\nconst classified = $input.all();\n\nconst companies = [];\n\nfor (let i = 0; i < extracted.length; i++) {\n  const info = extracted[i].json;\n  const ai = (classified[i] && classified[i].json) || {};\n\n  // E-ticaret olmadigi net olan siteleri listeye alma.\n  if (ai.isEcommerce === false) continue;\n\n  companies.push({\n    name: ai.name || info.title || info.domain,\n    domain: info.domain,\n    website: info.website,\n    email: info.email,\n    phone: info.phone,\n    city: ai.city || null,\n    sector: ai.sector || null,\n    score: typeof ai.confidence === 'number' ? ai.confidence : null,\n    isEcommerce: ai.isEcommerce !== false,\n    rawSnippet: (info.snippet || info.text || '').slice(0, 500),\n  });\n}\n\nconst first = extracted[0] ? extracted[0].json : {};\n\nreturn [\n  {\n    json: {\n      runId: first.runId,\n      appUrl: first.appUrl,\n      count: companies.length,\n      companies,\n    },\n  },\n];"
+        },
+        "id": "a1000000-0000-4000-8000-000000000010",
+        "name": "Kayitlari Hazirla",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1580,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.appUrl }}/api/n8n/companies",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ runId: $json.runId, companies: $json.companies }) }}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000011",
+        "name": "Sirketleri Kaydet",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1800,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Kayitlari Hazirla').first().json.appUrl }}/api/n8n/runs/finish",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ runId: $('Kayitlari Hazirla').first().json.runId, status: 'DONE' }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "id": "a1000000-0000-4000-8000-000000000012",
+        "name": "Kesfi Bitir",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2020,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Sorgu Uret",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sorgu Uret": {
+        "main": [
+          [
+            {
+              "node": "Sorgulari Ayir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sorgulari Ayir": {
+        "main": [
+          [
+            {
+              "node": "SearXNG Ara",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SearXNG Ara": {
+        "main": [
+          [
+            {
+              "node": "Aday Siteleri Cikar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aday Siteleri Cikar": {
+        "main": [
+          [
+            {
+              "node": "Ana Sayfayi Getir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ana Sayfayi Getir": {
+        "main": [
+          [
+            {
+              "node": "Iletisim Sayfasini Getir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Iletisim Sayfasini Getir": {
+        "main": [
+          [
+            {
+              "node": "Iletisim Bilgisi Cikar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Iletisim Bilgisi Cikar": {
+        "main": [
+          [
+            {
+              "node": "Sirketi Siniflandir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sirketi Siniflandir": {
+        "main": [
+          [
+            {
+              "node": "Kayitlari Hazirla",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Kayitlari Hazirla": {
+        "main": [
+          [
+            {
+              "node": "Sirketleri Kaydet",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sirketleri Kaydet": {
+        "main": [
+          [
+            {
+              "node": "Kesfi Bitir",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Utku Berat Kayıkcı",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-09-02T20:58:40.033Z",
+    "updatedAt": "2026-09-02T20:58:40.033Z",
+    "workflowPublishHistory": [
+      {
+        "id": 24,
+        "workflowId": "TNNVQsOcbfkq3gYr",
+        "versionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.145Z"
+      },
+      {
+        "id": 26,
+        "workflowId": "TNNVQsOcbfkq3gYr",
+        "versionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.318Z"
+      },
+      {
+        "id": 25,
+        "workflowId": "TNNVQsOcbfkq3gYr",
+        "versionId": "cfdbe9cd-a333-417c-8aec-19f461d103aa",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.254Z"
+      }
+    ]
+  }
+}

@@ -18,12 +18,20 @@ const splitQueriesCode = `
 const body = $('Webhook').first().json.body || {};
 const queries = $input.first().json.queries || [];
 
+// n8n 'localhost'u once IPv6 (::1) olarak cozer; Docker portu ve next dev
+// yalnizca IPv4 dinledigi icin adresi sabitle.
+function toIPv4(url) {
+  return String(url)
+    .replace(/\\/+$/, '')
+    .replace(/^(https?:\\/\\/)localhost(?=[:\\/]|$)/i, '$1127.0.0.1');
+}
+
 return queries.map((query) => ({
   json: {
     query,
     runId: body.runId,
-    appUrl: (body.appUrl || 'http://localhost:3000').replace(/\\/$/, ''),
-    searxngUrl: (body.searxngUrl || 'http://localhost:8080').replace(/\\/$/, ''),
+    appUrl: toIPv4(body.appUrl || 'http://127.0.0.1:3000'),
+    searxngUrl: toIPv4(body.searxngUrl || 'http://127.0.0.1:8080'),
     limit: body.limit || 25,
   },
 }));
@@ -43,6 +51,8 @@ const blocked = [
 
 const seen = new Set();
 const out = [];
+const errors = [];
+let resultTotal = 0;
 const limit = meta.limit || 25;
 
 // n8n Code node kum havuzunda URL sinifi yok; alan adini regex ile cikar.
@@ -53,7 +63,18 @@ function hostOf(value) {
 }
 
 for (const item of $input.all()) {
-  for (const result of item.json.results || []) {
+  // SearXNG'e ulasilamazsa HTTP node hatayi item olarak gecirir
+  // (onError: continueRegularOutput) — sebebi topla, sessizce yutma.
+  if (item.json && item.json.error) {
+    const err = item.json.error;
+    errors.push(String((err && err.message) || err));
+    continue;
+  }
+
+  const results = (item.json && item.json.results) || [];
+  resultTotal += results.length;
+
+  for (const result of results) {
     const host = hostOf(result.url);
     if (!host || !host.includes('.') || seen.has(host)) continue;
     if (blocked.some((b) => host === b || host.endsWith('.' + b))) continue;
@@ -61,6 +82,7 @@ for (const item of $input.all()) {
     seen.add(host);
     out.push({
       json: {
+        ok: true,
         domain: host,
         url: 'https://' + host + '/',
         title: result.title || '',
@@ -73,7 +95,23 @@ for (const item of $input.all()) {
   }
 }
 
-return out;
+if (out.length > 0) return out;
+
+// Aday yoksa zincir burada biterdi ve kayit "Calisiyor" olarak asili kalirdi.
+// Bunun yerine "Aday Var mi" IF node'unu FALSE dalina sokan bir bitirme
+// item'i uret; boylece sebep kullaniciya kadar ulasir.
+const unique = [...new Set(errors)];
+const reason = unique.length
+  ? 'SearXNG sorgulari basarisiz oldu: ' + unique.join(' | ') +
+    ' — SearXNG kapali olabilir: docker compose -f infra/docker-compose.yml up -d'
+  : 'SearXNG ' + resultTotal + ' sonuc dondurdu ama hicbiri uygun sirket sitesi degildi ' +
+    '(pazaryeri/sosyal medya elendi). Daha genel bir prompt deneyin.';
+
+return [
+  {
+    json: { ok: false, runId: meta.runId, appUrl: meta.appUrl, status: 'FAILED', error: reason },
+  },
+];
 `.trim()
 
 const extractCode = `
@@ -158,6 +196,7 @@ for (let i = 0; i < candidates.length; i++) {
 
   out.push({
     json: {
+      ok: true,
       domain: base.domain,
       website: base.url,
       runId: base.runId,
@@ -172,7 +211,24 @@ for (let i = 0; i < candidates.length; i++) {
   });
 }
 
-return out;
+if (out.length > 0) return out;
+
+// Hicbir siteden icerik alinamadi — kaydi acik birakmadan sebebi bildir.
+const meta = candidates[0] ? candidates[0].json : {};
+
+return [
+  {
+    json: {
+      ok: false,
+      runId: meta.runId,
+      appUrl: meta.appUrl,
+      status: 'FAILED',
+      error:
+        'Bulunan ' + candidates.length + ' sitenin hicbirine erisilemedi ' +
+        '(zaman asimi, sertifika hatasi veya bot engeli). Farkli bir prompt deneyin.',
+    },
+  },
+];
 `.trim()
 
 const mergeCode = `
@@ -208,6 +264,7 @@ const first = extracted[0] ? extracted[0].json : {};
 return [
   {
     json: {
+      ok: true,
       runId: first.runId,
       appUrl: first.appUrl,
       count: companies.length,
@@ -217,8 +274,59 @@ return [
 ];
 `.trim()
 
+const summaryCode = `
+// Kayit adiminin sonucunu tek bir "bitirme" item'ina indirger.
+const prepared = $('Kayitlari Hazirla').first().json;
+const response = $input.first().json || {};
+
+// HTTP node hatayi item olarak gecirir (onError: continueRegularOutput).
+const failure = response.error ? String(response.error.message || response.error) : null;
+
+return [
+  {
+    json: {
+      runId: prepared.runId,
+      appUrl: prepared.appUrl,
+      status: failure ? 'FAILED' : 'DONE',
+      error: failure ? 'Sirketler kaydedilemedi: ' + failure : null,
+    },
+  },
+];
+`.trim()
+
 /** HTTP node icin JSON govde ifadesi. */
 const jsonBody = (obj) => `=${obj}`
+
+/**
+ * "Devam edilsin mi?" dallanmasi.
+ *
+ * Code node'lari basarisizlikta tek bir `ok: false` item'i uretir; bu node
+ * onu FALSE dalina, oradan da "Kesfi Bitir" adimina yollar. Boylece zincir
+ * hangi adimda kopursa kopsun DiscoveryRun kapanir ve sebep UI'da gorunur.
+ */
+const ifNode = (name, id, position) => ({
+  parameters: {
+    conditions: {
+      options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+      conditions: [
+        {
+          id: `${id}-ok`,
+          leftValue: '={{ $json.ok === true }}',
+          rightValue: '',
+          operator: { type: 'boolean', operation: 'true', singleValue: true },
+        },
+      ],
+      combinator: 'and',
+    },
+    looseTypeValidation: true,
+    options: {},
+  },
+  id,
+  name,
+  type: 'n8n-nodes-base.if',
+  typeVersion: 2.2,
+  position,
+})
 
 const nodes = [
   {
@@ -287,6 +395,7 @@ const nodes = [
     typeVersion: 2,
     position: [480, 0],
   },
+  ifNode('Aday Var mi', 'a1000000-0000-4000-8000-000000000013', [700, 0]),
   {
     parameters: {
       url: '={{ $json.url }}',
@@ -302,7 +411,7 @@ const nodes = [
     name: 'Ana Sayfayi Getir',
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
-    position: [700, 0],
+    position: [920, -160],
     onError: 'continueRegularOutput',
   },
   {
@@ -320,7 +429,7 @@ const nodes = [
     name: 'Iletisim Sayfasini Getir',
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
-    position: [920, 0],
+    position: [1140, -160],
     onError: 'continueRegularOutput',
   },
   {
@@ -329,8 +438,9 @@ const nodes = [
     name: 'Iletisim Bilgisi Cikar',
     type: 'n8n-nodes-base.code',
     typeVersion: 2,
-    position: [1140, 0],
+    position: [1360, -160],
   },
+  ifNode('Iletisim Var mi', 'a1000000-0000-4000-8000-000000000014', [1580, -160]),
   {
     parameters: {
       method: 'POST',
@@ -346,7 +456,7 @@ const nodes = [
     name: 'Sirketi Siniflandir',
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
-    position: [1360, 0],
+    position: [1800, -280],
     onError: 'continueRegularOutput',
   },
   {
@@ -355,7 +465,7 @@ const nodes = [
     name: 'Kayitlari Hazirla',
     type: 'n8n-nodes-base.code',
     typeVersion: 2,
-    position: [1580, 0],
+    position: [2020, -280],
   },
   {
     parameters: {
@@ -372,17 +482,26 @@ const nodes = [
     name: 'Sirketleri Kaydet',
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
-    position: [1800, 0],
+    position: [2240, -280],
     onError: 'continueRegularOutput',
   },
   {
+    parameters: { jsCode: summaryCode },
+    id: 'a1000000-0000-4000-8000-000000000015',
+    name: 'Sonucu Ozetle',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [2460, -280],
+  },
+  {
+    // Basarili da olsa basarisiz da olsa buraya gelinir: kayit hep kapanir.
     parameters: {
       method: 'POST',
-      url: "={{ $('Kayitlari Hazirla').first().json.appUrl }}/api/n8n/runs/finish",
+      url: '={{ $json.appUrl }}/api/n8n/runs/finish',
       sendBody: true,
       specifyBody: 'json',
       jsonBody: jsonBody(
-        "{{ JSON.stringify({ runId: $('Kayitlari Hazirla').first().json.runId, status: 'DONE' }) }}",
+        "{{ JSON.stringify({ runId: $json.runId, status: $json.status || 'DONE', error: $json.error || null }) }}",
       ),
       options: { timeout: 30000 },
     },
@@ -390,15 +509,30 @@ const nodes = [
     name: 'Kesfi Bitir',
     type: 'n8n-nodes-base.httpRequest',
     typeVersion: 4.2,
-    position: [2020, 0],
+    position: [2680, 0],
     onError: 'continueRegularOutput',
   },
 ]
 
-const order = nodes.map((n) => n.name)
-const connections = {}
-for (let i = 0; i < order.length - 1; i++) {
-  connections[order[i]] = { main: [[{ node: order[i + 1], type: 'main', index: 0 }]] }
+/** main cikisindan (0 = true / 1 = false) hedef node'a baglanti. */
+const to = (node) => [{ node, type: 'main', index: 0 }]
+
+const connections = {
+  Webhook: { main: [to('Sorgu Uret')] },
+  'Sorgu Uret': { main: [to('Sorgulari Ayir')] },
+  'Sorgulari Ayir': { main: [to('SearXNG Ara')] },
+  'SearXNG Ara': { main: [to('Aday Siteleri Cikar')] },
+  'Aday Siteleri Cikar': { main: [to('Aday Var mi')] },
+  // Aday yoksa dogrudan bitirmeye git (kayit "Calisiyor" asili kalmasin).
+  'Aday Var mi': { main: [to('Ana Sayfayi Getir'), to('Kesfi Bitir')] },
+  'Ana Sayfayi Getir': { main: [to('Iletisim Sayfasini Getir')] },
+  'Iletisim Sayfasini Getir': { main: [to('Iletisim Bilgisi Cikar')] },
+  'Iletisim Bilgisi Cikar': { main: [to('Iletisim Var mi')] },
+  'Iletisim Var mi': { main: [to('Sirketi Siniflandir'), to('Kesfi Bitir')] },
+  'Sirketi Siniflandir': { main: [to('Kayitlari Hazirla')] },
+  'Kayitlari Hazirla': { main: [to('Sirketleri Kaydet')] },
+  'Sirketleri Kaydet': { main: [to('Sonucu Ozetle')] },
+  'Sonucu Ozetle': { main: [to('Kesfi Bitir')] },
 }
 
 const workflow = {
@@ -409,6 +543,28 @@ const workflow = {
   settings: { executionOrder: 'v1' },
   tags: [],
 }
+
+/**
+ * Code node'larinin sozdizimini burada dogrula.
+ *
+ * Bu dosyada kod, sablon dizesi (`) icinde yaziliyor: `\/` gibi kacislar
+ * derlenirken sadelesiyor ve bozuk kod n8n'e sessizce yuklenebiliyor.
+ * Hatayi calisma aninda degil, uretim aninda gorelim.
+ */
+function assertCodeNodesParse(definition) {
+  for (const node of definition.nodes) {
+    if (node.type !== 'n8n-nodes-base.code') continue
+    try {
+      new Function(node.parameters.jsCode)
+    } catch (error) {
+      console.error(`\nHATA: "${node.name}" Code node'u derlenmiyor: ${error.message}`)
+      console.error('Sablon dizesi icinde ters bolu kullandiysaniz iki kez yazin: \\\\/\n')
+      process.exit(1)
+    }
+  }
+}
+
+assertCodeNodesParse(workflow)
 
 fs.writeFileSync(OUT, JSON.stringify(workflow, null, 2) + '\n', 'utf8')
 console.log(`yazildi: ${OUT} (${nodes.length} node)`)

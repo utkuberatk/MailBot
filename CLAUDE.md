@@ -123,6 +123,19 @@ Fazlar sırayla yapılır. Bir faz, "Bitti" koşulu sağlanmadan kapatılmaz.
 - **Servis adresleri n8n'e webhook gövdesiyle geçilir** (`appUrl`, `searxngUrl`) — n8n tarafında kimlik bilgisi/ayar tutmaya gerek yok. n8n Docker içindeyse `.env`'de bu adresleri `host.docker.internal` ile yazın.
 - ✅ Uçtan uca doğrulandı: `İstanbul içi butik mağazalar` → 11 gerçek butik sitesi, 8'i e-postalı.
 - **n8n Code node'larında `URL` sınıfı yoktur** — alan adı/host ayrıştırmasını regex ile yapın, aksi halde `try/catch` hatayı yutar ve node sessizce 0 sonuç döndürür.
+- **Bir node 0 item döndürürse n8n zinciri sessizce keser:** sonraki node'lar hiç çalışmaz, çalıştırma
+  "success" görünür ve `DiscoveryRun` sonsuza kadar RUNNING kalır. Bu yüzden `Aday Siteleri Cikar` ve
+  `Iletisim Bilgisi Cikar` başarısızlıkta **tek bir `ok:false` item** üretir; `Aday Var mi` /
+  `Iletisim Var mi` IF node'ları bunu FALSE dalından doğrudan `Kesfi Bitir`'e yollar. Sonuç: keşif
+  hangi adımda koparsa kopsun kayıt kapanır ve sebep UI'da görünür.
+- **Ön kontrol:** `POST /api/discover` önce SearXNG'e ping atar; kapalıysa kayıt bile açmadan
+  `503` + çalıştırma komutunu döndürür (eskiden 10 dakika "Çalışıyor" görünüyordu).
+- **`localhost` yerine `127.0.0.1`:** n8n (Node) `localhost`'u önce IPv6 `::1` olarak çözer; Docker'ın
+  yayınladığı port ve `next dev` IPv4 dinlediğinde istek `ECONNREFUSED ::1:8080` ile düşer.
+  Adresler n8n'e `lib/env.ts` → `preferIPv4()` ile geçirilir.
+- **Code node'ları şablon dizesi (`` ` ``) içinde yazılıyor:** regex'lerde ters bölüyü **iki kez**
+  yazın (`/\\/$/`), yoksa kaçış sadeleşir ve n8n'e bozuk kod yüklenir. `npm run workflows` her Code
+  node'unu `new Function()` ile derleyip doğrular, hatalıysa üretmez.
 
 ### ✅ Faz 4 — Şirket yönetimi (tamamlandı)
 - `/companies`: arama, şehir/sektör/e-posta filtreleri, çoklu seçim, toplu silme, seçilenlerle `/compose`'a geçiş.

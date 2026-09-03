@@ -1,0 +1,280 @@
+{
+  "id": "m8kWJs6syp9U8eMh",
+  "name": "mailbot-inbox-sync",
+  "description": null,
+  "active": true,
+  "activeVersionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+  "createdAt": "2026-09-02T20:25:01.048Z",
+  "updatedAt": "2026-09-02T20:58:40.347Z",
+  "isArchived": false,
+  "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000001",
+      "name": "Her 3 Dakikada",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/jobs/sync-inbox",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "b1000000-0000-4000-8000-000000000002",
+      "name": "Yanitlari Senkronize Et",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Her 3 Dakikada": {
+      "main": [
+        [
+          {
+            "node": "Yanitlari Senkronize Et",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {
+    "node:Her 3 Dakikada": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "m8kWJs6syp9U8eMh",
+      "projectId": "x8wBI9XSNBGZNa9l",
+      "project": {
+        "id": "x8wBI9XSNBGZNa9l",
+        "name": "Utku Berat Kayıkcı <utkuberat.contact@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-08-31T16:31:22.613Z",
+        "updatedAt": "2026-08-31T16:32:28.663Z"
+      },
+      "createdAt": "2026-09-02T20:25:01.051Z",
+      "updatedAt": "2026-09-02T20:25:01.051Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+    "workflowId": "m8kWJs6syp9U8eMh",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 3
+              }
+            ]
+          }
+        },
+        "id": "b1000000-0000-4000-8000-000000000001",
+        "name": "Her 3 Dakikada",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:3000/api/jobs/sync-inbox",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "{}",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "id": "b1000000-0000-4000-8000-000000000002",
+        "name": "Yanitlari Senkronize Et",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          240,
+          0
+        ],
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Her 3 Dakikada": {
+        "main": [
+          [
+            {
+              "node": "Yanitlari Senkronize Et",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Utku Berat Kayıkcı",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-09-02T20:25:01.053Z",
+    "updatedAt": "2026-09-02T20:25:01.053Z",
+    "workflowPublishHistory": [
+      {
+        "id": 6,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:25:01.217Z"
+      },
+      {
+        "id": 12,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:31:17.719Z"
+      },
+      {
+        "id": 14,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:31:17.862Z"
+      },
+      {
+        "id": 20,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:53:06.202Z"
+      },
+      {
+        "id": 22,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:53:06.364Z"
+      },
+      {
+        "id": 28,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.441Z"
+      },
+      {
+        "id": 30,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "activated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.626Z"
+      },
+      {
+        "id": 11,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:31:17.701Z"
+      },
+      {
+        "id": 13,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:31:17.804Z"
+      },
+      {
+        "id": 19,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:53:06.182Z"
+      },
+      {
+        "id": 21,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:53:06.297Z"
+      },
+      {
+        "id": 27,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.423Z"
+      },
+      {
+        "id": 29,
+        "workflowId": "m8kWJs6syp9U8eMh",
+        "versionId": "a112b1b2-1f89-4129-92ab-b5f8b049cec7",
+        "event": "deactivated",
+        "userId": "2533ce62-5a78-4af6-90c4-d4d1cf504497",
+        "createdAt": "2026-09-02T20:58:40.565Z"
+      }
+    ]
+  }
+}
