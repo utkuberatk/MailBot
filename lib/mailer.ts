@@ -165,7 +165,7 @@ const REPLY_TO_UNSUBSCRIBE =
  * Gelen yanit `lib/inbox.ts` -> isOptOutRequest() ile yakalanir.
  */
 const PERSONAL_OPT_OUT =
-  'İlginizi çekmiyorsa "ilgilenmiyorum" yazıp yanıtlamanız yeterli, bir daha yazmam.'
+  'Dipnot: Eğer ilginizi çekmediyse, "İlgilenmiyorum" yazarak yanıtlamanız yeterlidir. Tarafınıza tekrar e-posta gönderilmeyecektir.'
 
 /**
  * `List-Unsubscribe` baslik degeri.

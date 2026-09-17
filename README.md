@@ -68,8 +68,9 @@ abonelik dili ve maildeki linkler/takip pikseli. Tek tek ölümcül değil, biri
 | Listeden çıkma | metnin sonunda doğal cümle | başlık + link/mailto |
 | Açılma takibi | çalışmaz | çalışır |
 
-Kişisel modda çıkış şöyle sunulur: *"İlginizi çekmiyorsa 'ilgilenmiyorum' yazıp yanıtlamanız
-yeterli, bir daha yazmam."* Böyle bir yanıt gelirse şirket otomatik pasifleşir.
+Kişisel modda çıkış şöyle sunulur: *"Dipnot: Eğer ilginizi çekmediyse, 'İlgilenmiyorum'
+yazarak yanıtlamanız yeterlidir. Tarafınıza tekrar e-posta gönderilmeyecektir."* Böyle bir
+yanıt gelirse şirket otomatik pasifleşir.
 
 **Video ne olacak?** İlk maile link konmadığı için video, yanıt verenlere gönderilir: yanıt
 kutusuna ya da `!mailcevap` metnine `{{video}}` yazın, sistem kampanyanın gerçek adresiyle

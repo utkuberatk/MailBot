@@ -7,6 +7,7 @@ import {
   type IncomingMail,
 } from '@/lib/email'
 import { findReferencedMessageId, isOptOutRequest } from '@/lib/inbox'
+import { buildText } from '@/lib/mailer'
 
 process.env.SENDER_NAME = 'Utku Berat'
 process.env.SENDER_ADDRESS = 'sales@getsylva.net'
@@ -135,4 +136,14 @@ test('the same IMAP message is not returned on a second synchronization', () => 
 test('opt-out detection keeps personal-mode rejection phrases active', () => {
   assert.equal(isOptOutRequest('İlgilenmiyorum, bir daha e-posta göndermeyin.'), true)
   assert.equal(isOptOutRequest('Yarın saat 15:00 uygundur.'), false)
+})
+
+test('personal email ends with the professional opt-out note', () => {
+  const text = buildText({ body: 'Merhaba', trackingId: 'test-tracking-id' })
+
+  assert.ok(
+    text.endsWith(
+      'Dipnot: Eğer ilginizi çekmediyse, "İlgilenmiyorum" yazarak yanıtlamanız yeterlidir. Tarafınıza tekrar e-posta gönderilmeyecektir.',
+    ),
+  )
 })

@@ -230,8 +230,9 @@ oluyor ama karşı tarafın telefonu hiç titremiyor ve mail çoğu zaman görü
   `List-Unsubscribe` başlığı **gönderilmez**.
 - **Kişisel modda `mailTrackingUrl()` her zaman boş döner** — piksel, sarılmış link ve https
   çıkış linki tek noktadan kapanır; `lib/mailer.ts` ve `lib/tracking.ts` ayrı kontrol yapmaz.
-- **Çıkış yolu gövdedeki doğal cümledir:** *"İlginizi çekmiyorsa 'ilgilenmiyorum' yazıp
-  yanıtlamanız yeterli, bir daha yazmam."* 6563 sayılı Kanun tacire önceden izin şartı
+- **Çıkış yolu gövdedeki doğal cümledir:** *"Dipnot: Eğer ilginizi çekmediyse,
+  'İlgilenmiyorum' yazarak yanıtlamanız yeterlidir. Tarafınıza tekrar e-posta
+  gönderilmeyecektir."* 6563 sayılı Kanun tacire önceden izin şartı
   aramaz ama **reddetme imkânı zorunludur**; bu cümle onu karşılar ve "listeden çıkın /
   abonelik" toplu-mail dilini içermez. Yanıt `isOptOutRequest()` ile yakalanır (regex'e
   `ilgilenmiyor`, `yazmayin`, `gondermeyin` kalıpları eklendi).
