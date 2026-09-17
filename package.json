@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "lint": "biome lint \"app/api/replies/[id]/answer/route.ts\" app/settings/page.tsx lib/email.ts lib/env.ts lib/inbox.ts lib/mailer.ts scripts/email-check.js tests/email.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/email.test.ts",
     "start": "next start",
     "bot": "node bot/index.js",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
-    "gmail:auth": "node scripts/gmail-auth.js",
+    "email:check": "node scripts/email-check.js",
     "n8n:sync": "node scripts/n8n-sync.js",
     "launcher": "node scripts/make-launcher.js",
     "workflows": "node scripts/build-workflows.js",
@@ -23,11 +26,15 @@
     "@prisma/client": "^7.10.0",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
+    "imapflow": "2.0.5",
     "next": "^16.3.4",
+    "nodemailer": "10.0.10",
+    "postal-mime": "3.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
@@ -35,11 +42,13 @@
     "postcss": "^8.5.26",
     "prisma": "^7.10.0",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.13",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
     "@prisma/client@7.10.0": true,
     "@prisma/engines@7.10.0": true,
-    "better-sqlite3@12.11.1": true
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.2": true
   }
 }

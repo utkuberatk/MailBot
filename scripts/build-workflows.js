@@ -569,7 +569,7 @@ assertCodeNodesParse(workflow)
 fs.writeFileSync(OUT, JSON.stringify(workflow, null, 2) + '\n', 'utf8')
 console.log(`yazildi: ${OUT} (${nodes.length} node)`)
 
-// --- mailbot-inbox-sync: 3 dakikada bir Gmail yanitlarini cek --------------
+// --- mailbot-inbox-sync: 3 dakikada bir IMAP yanitlarini cek ---------------
 
 const inboxWorkflow = {
   name: 'mailbot-inbox-sync',

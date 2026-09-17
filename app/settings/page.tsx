@@ -20,7 +20,7 @@ const GROUPS: Group[] = [
   },
   {
     title: 'Gönderen kimliği',
-    note: 'Mail imzasında ve açılma takibinde kullanılır.',
+    note: 'SMTP hesabıyla aynı adresi ve mail imzasını belirler.',
     keys: [
       { key: 'SENDER_NAME', where: 'Mail imzasındaki ad soyad' },
       { key: 'SENDER_TITLE', where: 'Unvan (örn. Kurucu)' },
@@ -38,13 +38,19 @@ const GROUPS: Group[] = [
     keys: [{ key: 'GROQ_API_KEY', where: 'console.groq.com → API Keys' }],
   },
   {
-    title: 'Gmail',
-    note: 'Mail gönderimi ve yanıtların okunması için gerekli (Faz 5).',
+    title: 'E-posta (SMTP / IMAP)',
+    note: 'Spacemail üzerinden gönderim ve gelen yanıtların okunması için gerekli.',
     keys: [
-      { key: 'GMAIL_CLIENT_ID', where: 'Google Cloud Console → Credentials → OAuth (Desktop app)' },
-      { key: 'GMAIL_CLIENT_SECRET', where: 'Aynı OAuth istemcisi' },
-      { key: 'GMAIL_REFRESH_TOKEN', where: 'npm run gmail:auth komutu üretir' },
-      { key: 'GMAIL_USER', where: 'Gönderim yapılacak Gmail adresi' },
+      { key: 'SMTP_HOST', where: 'Spacemail SMTP sunucusu' },
+      { key: 'SMTP_PORT', where: 'SSL/TLS SMTP portu' },
+      { key: 'SMTP_SECURE', where: 'Port 465 için true' },
+      { key: 'SMTP_USER', where: 'Spacemail posta kutusu adresi' },
+      { key: 'SMTP_PASSWORD', where: 'Yalnızca yerel .env içindeki posta kutusu parolası' },
+      { key: 'IMAP_HOST', where: 'Spacemail IMAP sunucusu' },
+      { key: 'IMAP_PORT', where: 'SSL/TLS IMAP portu' },
+      { key: 'IMAP_SECURE', where: 'Port 993 için true' },
+      { key: 'IMAP_USER', where: 'Spacemail posta kutusu adresi' },
+      { key: 'IMAP_PASSWORD', where: 'Yalnızca yerel .env içindeki posta kutusu parolası' },
     ],
   },
   {

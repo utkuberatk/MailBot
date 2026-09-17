@@ -15,7 +15,7 @@ Ayrıntılı yol haritası ve mimari: [CLAUDE.md](CLAUDE.md)
 npm install
 cp .env.example .env          # sonra .env içindeki anahtarları doldurun
 npm run db:migrate            # SQLite veritabanını oluşturur
-npm run gmail:auth            # Gmail refresh token üretir (tarayıcıda onay ister)
+npm run email:check           # SMTP/IMAP kimlik doğrulamasını mail göndermeden sınar
 docker compose -f infra/docker-compose.yml up -d   # SearXNG
 npm run workflows             # n8n workflow JSON'larını üretir
 npm run n8n:sync push         # n8n'e yükler
@@ -32,14 +32,21 @@ başlatır ve tarayıcıyı açar.
 | Anahtar | Nereden |
 |---|---|
 | `GROQ_API_KEY` | console.groq.com → API Keys |
-| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | Google Cloud Console → OAuth client ID → **Desktop app** |
-| `GMAIL_REFRESH_TOKEN` / `GMAIL_USER` | `npm run gmail:auth` otomatik yazar |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | Spacemail SMTP bağlantı ayarları |
+| `SMTP_USER` / `SMTP_PASSWORD` | Spacemail posta kutusu ve yalnızca yerel `.env` içindeki parolası |
+| `IMAP_HOST` / `IMAP_PORT` / `IMAP_SECURE` | Spacemail IMAP bağlantı ayarları |
+| `IMAP_USER` / `IMAP_PASSWORD` | Spacemail posta kutusu ve yalnızca yerel `.env` içindeki parolası |
+| `SENDER_ADDRESS` | SMTP ile doğrulanan gönderici adresi; `SMTP_USER` ile aynı olmalı |
 | `N8N_API_KEY` | n8n → Settings → n8n API |
 | `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_ID` / `DISCORD_OWNER_ID` | discord.com/developers |
 | `MAIL_TRACKING_URL` | Açılma takibi için **kendi alan adınız** (opsiyonel, aşağıya bakın) |
 
-Google Cloud projesinde **Gmail API'yi etkinleştirmeyi** unutmayın; Discord Developer Portal'da
-**MESSAGE CONTENT INTENT** açık olmalı.
+Discord Developer Portal'da **MESSAGE CONTENT INTENT** açık olmalı. E-posta parolaları n8n'e
+veya Discord botuna verilmez; SMTP/IMAP bağlantılarını yalnızca Next.js uygulaması açar.
+
+`npm run email:check` SMTP ve IMAP sunucularında bağlantı ile kimlik doğrulamayı sınar. Bu komut
+mail göndermez, INBOX açmaz ve mesaj bayraklarını değiştirmez. Gerçek gönderim testi ayrıca ve
+bilinçli olarak Mail Yaz ekranından yapılmalıdır.
 
 ### Mailim "Tanıtım" sekmesine düşüyor (`MAIL_STYLE`)
 
@@ -159,7 +166,7 @@ npm run bot          # Discord botu
 npm run db:studio    # veritabanını tarayıcıda gör
 npm run workflows    # workflow JSON'larını üret
 npm run n8n:sync     # list / backup / purge --yes / push / reset --yes
-npm run gmail:auth   # Gmail refresh token
+npm run email:check  # SMTP/IMAP bağlantısını mail göndermeden doğrula
 npm run launcher     # masaüstü kısayolu
 npm run tunnel       # cloudflared tüneli (açılma takibi)
 ```
@@ -170,10 +177,10 @@ npm run tunnel       # cloudflared tüneli (açılma takibi)
 
 ```
 app/     Next.js UI + API routes (veritabanına yalnızca burası yazar)
-lib/     db, env, groq, gmail, mailer, inbox, video, companies, csv
+lib/     db, env, groq, email, mailer, inbox, video, companies, csv
 bot/     Discord botu (ayrı process, sadece HTTP API'yi çağırır)
 n8n/     workflow JSON'ları + silinen workflow yedekleri
-scripts/ gmail-auth, n8n-sync, build-workflows, make-launcher
+scripts/ email-check, n8n-sync, build-workflows, make-launcher
 infra/   SearXNG docker-compose ve ayarları
 media/   video ve önizleme dosyaları (git'e girmez)
 ```

@@ -1,7 +1,7 @@
 import { db } from '@/lib/db'
 import { isInternalRequest, unauthorized } from '@/lib/auth'
 import { polishReply } from '@/lib/groq'
-import { sendMail, getMessageIdHeader } from '@/lib/gmail'
+import { extractMessageIds, sendMail } from '@/lib/email'
 import { renderVideoPlaceholder } from '@/lib/mailer'
 import { env } from '@/lib/env'
 
@@ -52,41 +52,46 @@ export async function POST(
     ? reply.message.subject
     : `Re: ${reply.message.subject}`
 
-  // In-Reply-To okunamazsa gonderimi engelleme; thread'e ekleme zaten threadId
-  // ile calisiyor, baslik sadece istemci tarafinda daha duzgun gruplama saglar.
-  let inReplyTo: string | null = null
-  if (reply.gmailMessageId) {
-    try {
-      inReplyTo = await getMessageIdHeader(reply.gmailMessageId)
-    } catch (error) {
-      console.error('[answer] Message-ID okunamadi:', error)
-    }
-  }
+  // Gelen yanitin Message-ID'si ebeveyndir. References kok iletiden ebeveyne
+  // kadar korunur; istemciler ve sonraki IMAP senkronlari ayni konusmayi bulur.
+  const inReplyTo = reply.rfcMessageId ?? reply.message.rfcMessageId
+  const references = extractMessageIds(
+    [reply.references, reply.message.rfcMessageId, reply.rfcMessageId].filter(Boolean).join(' '),
+  )
 
   try {
     const sent = await sendMail({
       to: reply.fromEmail,
       subject,
       text: full,
-      // Gmail'in kendi compose ciktisiyla ayni sade kalip: inline CSS yok.
+      // Web posta istemcilerinin sade compose ciktisiyla ayni kalip: inline CSS yok.
       // Sekme kararini thread'in ilk maili belirler, ama "elle yazilmis"
       // gorunumunu bozmamak icin bicimlendirme eklemiyoruz.
       html: `<div dir="ltr">${full
         .split('\n')
         .map((line) => line.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!))
         .join('<br>')}</div>`,
-      threadId: reply.message.gmailThreadId ?? undefined,
       inReplyTo: inReplyTo ?? undefined,
+      references,
     })
 
-    await db.reply.update({ where: { id: replyId }, data: { answeredAt: new Date() } })
+    await db.$transaction([
+      db.reply.update({ where: { id: replyId }, data: { answeredAt: new Date() } }),
+      db.emailThreadReference.create({
+        data: {
+          messageId: reply.messageId,
+          rfcMessageId: sent.messageId,
+          direction: 'OUTBOUND',
+        },
+      }),
+    ])
 
     return Response.json({
       ok: true,
       to: reply.fromEmail,
       company: reply.message.company.name,
       sentText: finalText,
-      gmailMessageId: sent.id,
+      messageId: sent.messageId,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Yanıt gönderilemedi.'

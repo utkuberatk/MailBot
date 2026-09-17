@@ -75,6 +75,9 @@ model Message {
   trackingId     String    @unique
   gmailMessageId String?
   gmailThreadId  String?
+  /// SMTP ile gonderilen iletinin RFC Message-ID basligi.
+  /// Yeni IMAP yanitlari bu deger ve EmailThreadReference kayitlariyla eslesir.
+  rfcMessageId   String?   @unique
   sentAt         DateTime?
   /// Ilk gercek acilma. null ise UI'da kirmizi/tek tik, dolu ise cift yesil tik.
   /// Sahte acilma (mail tarayici, on yukleme) burayi doldurmaz.
@@ -90,10 +93,11 @@ model Message {
   error          String?
   createdAt      DateTime  @default(now())
 
-  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  replies  Reply[]
-  events   TrackEvent[]
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campaign        Campaign?              @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  replies         Reply[]
+  events          TrackEvent[]
+  emailReferences EmailThreadReference[]
 
   @@index([status])
   @@index([gmailThreadId])
@@ -132,6 +136,13 @@ model Reply {
   fromEmail         String
   bodyText          String
   gmailMessageId    String?   @unique
+  /// IMAP'ten okunan iletinin RFC Message-ID basligi.
+  rfcMessageId      String?   @unique
+  /// Hesap + mailbox + UIDVALIDITY + UID birlesimi; Message-ID olmasa da tekrar islemeyi engeller.
+  imapKey           String?   @unique
+  /// Gelen iletinin RFC In-Reply-To ve References basliklari.
+  inReplyTo         String?
+  references        String?
   receivedAt        DateTime
   /// POSITIVE | NEUTRAL | NEGATIVE
   sentiment         String    @default("NEUTRAL")
@@ -149,6 +160,21 @@ model Reply {
 
   @@index([sentiment])
   @@index([deletedAt])
+}
+
+/// Bir konusmadaki tum gelen/giden RFC Message-ID degerlerini kok Message'a baglar.
+/// Gmail thread kimligine bagli degildir; SMTP/IMAP saglayicisi degisse de eslestirme surer.
+model EmailThreadReference {
+  id           Int      @id @default(autoincrement())
+  messageId    Int
+  rfcMessageId String   @unique
+  /// OUTBOUND | INBOUND
+  direction    String
+  createdAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }
 
 /// Bir discovery calistirmasi (prompt -> sirket listesi).

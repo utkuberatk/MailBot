@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
  * Yaniti listeden kaldirir. Govde: { ids: number[] }
  *
  * Kayit fiziksel olarak silinmez; `deletedAt` doldurulur. Boylece 3 dakikada
- * bir calisan gelen kutusu senkronizasyonu ayni Gmail mesajini yeniden
+ * bir calisan gelen kutusu senkronizasyonu ayni IMAP mesajini yeniden
  * eklemez — kayit durdugu icin "zaten islenmis" sayilir.
  */
 export async function DELETE(request: Request) {

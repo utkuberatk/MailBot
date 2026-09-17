@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
-import { sendMail } from '@/lib/gmail'
+import { sendMail } from '@/lib/email'
 import { trackedLink } from '@/lib/tracking'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -20,7 +20,7 @@ const WARMUP_KEY = 'warmup_started_at'
 /**
  * Isinma kademeleri.
  *
- * Yeni bir Gmail hesabindan birdenbire onlarca soguk mail cikmasi, hesabin
+ * Yeni bir gonderici hesabindan birdenbire onlarca soguk mail cikmasi, hesabin
  * itibarini bozan en hizli yoldur. Gunluk hacim kademeli acilir.
  */
 const WARMUP_STAGES = [
@@ -188,7 +188,7 @@ export function listUnsubscribeHeader(
     return { value: `<${trackingUrl}/api/unsubscribe/${trackingId}>`, oneClick: true }
   }
 
-  const address = env.gmailUser()
+  const address = env.sender().address
   return { value: `<mailto:${address}?subject=Listeden%20cikar>`, oneClick: false }
 }
 
@@ -417,8 +417,10 @@ async function sendOne(message: {
       data: {
         status: 'SENT',
         sentAt: new Date(),
-        gmailMessageId: sent.id,
-        gmailThreadId: sent.threadId,
+        rfcMessageId: sent.messageId,
+        emailReferences: {
+          create: { rfcMessageId: sent.messageId, direction: 'OUTBOUND' },
+        },
         bodyHtml: personal ? text : (html ?? message.bodyHtml),
         error: null,
       },

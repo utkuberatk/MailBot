@@ -66,7 +66,7 @@ SMTP/IMAP parolaları yalnızca Next.js tarafındaki `.env` dosyasında durur; n
 
 ```
 Mailbot/
-├── CLAUDE.md              # bu dosya — yol haritası
+├── AGENTS.md              # bu dosya — yol haritası
 ├── README.md              # kısa kurulum özeti
 ├── .env.example           # tüm değişkenler (gerçek değerler .env'de)
 ├── app/                   # Next.js uygulaması (UI + API routes)
@@ -419,7 +419,7 @@ docker compose -f infra/docker-compose.yml up -d   # SearXNG
 
 ## 13. Kurulu skill'ler
 
-`.claude/skills/` altında (skills.sh üzerinden kuruldu):
+`.Codex/skills/` altında (skills.sh üzerinden kuruldu):
 
 | Skill | Kaynak | Ne için |
 |---|---|---|
@@ -428,7 +428,7 @@ docker compose -f infra/docker-compose.yml up -d   # SearXNG
 | `prisma-composer` | `prisma skills sync` | Kurulu Prisma sürümüyle otomatik senkron |
 | `vercel-react-best-practices` | `vercel-labs/agent-skills` | React/Next.js performans kuralları |
 
-Yeni skill kurmak için: `npx skills add <owner/repo> --skill <name> --agent claude-code`
+Yeni skill kurmak için: `npx skills add <owner/repo> --skill <name> --agent Codex`
 
 <!-- BEGIN:nextjs-agent-rules -->
 

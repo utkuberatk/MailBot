@@ -34,6 +34,23 @@ export function numberEnv(key: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** Boolean degisken — yalnizca acik true/false degerlerini kabul eder. */
+export function booleanEnv(key: string): boolean {
+  const value = requireEnv(key).trim().toLowerCase()
+  if (value === 'true' || value === '1') return true
+  if (value === 'false' || value === '0') return false
+  throw new Error(`Ortam degiskeni gecersiz: ${key}. true veya false kullanin.`)
+}
+
+/** TCP portu — 1..65535 araliginda tam sayi olmalidir. */
+export function portEnv(key: string): number {
+  const parsed = Number(requireEnv(key))
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new Error(`Ortam degiskeni gecersiz: ${key}. Gecerli bir port numarasi kullanin.`)
+  }
+  return parsed
+}
+
 /** Bir grup degiskenden hangilerinin eksik oldugunu doner (Ayarlar sayfasi icin). */
 export function missingKeys(keys: string[]): string[] {
   return keys.filter((key) => !process.env[key] || process.env[key]!.trim() === '')
@@ -156,16 +173,27 @@ export const env = {
   groqApiKey: () => requireEnv('GROQ_API_KEY'),
   groqModel: () => optionalEnv('GROQ_MODEL', 'openai/gpt-oss-120b'),
 
-  gmailClientId: () => requireEnv('GMAIL_CLIENT_ID'),
-  gmailClientSecret: () => requireEnv('GMAIL_CLIENT_SECRET'),
-  gmailRefreshToken: () => requireEnv('GMAIL_REFRESH_TOKEN'),
-  gmailUser: () => requireEnv('GMAIL_USER'),
+  smtp: () => ({
+    host: requireEnv('SMTP_HOST'),
+    port: portEnv('SMTP_PORT'),
+    secure: booleanEnv('SMTP_SECURE'),
+    user: requireEnv('SMTP_USER'),
+    password: requireEnv('SMTP_PASSWORD'),
+  }),
+
+  imap: () => ({
+    host: requireEnv('IMAP_HOST'),
+    port: portEnv('IMAP_PORT'),
+    secure: booleanEnv('IMAP_SECURE'),
+    user: requireEnv('IMAP_USER'),
+    password: requireEnv('IMAP_PASSWORD'),
+  }),
 
   /** Mail imzasinda ve List-Unsubscribe basliginda kullanilir. */
   sender: () => ({
     name: optionalEnv('SENDER_NAME'),
     title: optionalEnv('SENDER_TITLE'),
-    address: optionalEnv('SENDER_ADDRESS', optionalEnv('GMAIL_USER')),
+    address: requireEnv('SENDER_ADDRESS'),
   }),
 
   videoBaseUrl: () => optionalEnv('VIDEO_BASE_URL', optionalEnv('APP_URL', 'http://localhost:3000') + '/media'),

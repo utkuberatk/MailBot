@@ -1,0 +1,20 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "includes": [
+      "app/**",
+      "bot/**",
+      "lib/**",
+      "scripts/**",
+      "tests/**",
+      "*.{js,cjs,mjs,ts,tsx}"
+    ],
+    "ignoreUnknown": true
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  }
+}

@@ -1,13 +1,20 @@
 /**
  * Gelen kutusu senkronizasyonu.
  *
- * Gonderilmis her mailin Gmail thread'i taranir, bize gelen yeni yanitlar
+ * Son 30 gundeki IMAP iletileri salt okunur taranir. In-Reply-To ve References
+ * basliklari gonderilmis RFC Message-ID degerleriyle eslestirilir; yeni yanitlar
  * Reply olarak kaydedilir ve Groq ile duygu analizi yapilir.
  * n8n bu isi 3 dakikada bir /api/jobs/sync-inbox uzerinden tetikler.
  */
 
 import { db } from '@/lib/db'
-import { getThreadReplies } from '@/lib/gmail'
+import {
+  deduplicateIncomingMessages,
+  fetchIncomingMessages,
+  incomingReferenceIds,
+  type IncomingMail,
+} from '@/lib/email'
+import { env } from '@/lib/env'
 import { analyzeReply, type ReplyAnalysis } from '@/lib/groq'
 
 export type SyncResult = {
@@ -57,13 +64,38 @@ export function isOptOutRequest(text: string): boolean {
   return patterns.some((pattern) => pattern.test(normalized))
 }
 
-/** Son 30 gunde gonderilmis mailleri tarar. */
+/** Gelen iletinin en yakin RFC referansini kok Message kaydina esler. */
+export function findReferencedMessageId(
+  incoming: IncomingMail,
+  referenceToMessage: ReadonlyMap<string, number>,
+): number | null {
+  for (const reference of incomingReferenceIds(incoming)) {
+    const messageId = referenceToMessage.get(reference)
+    if (messageId !== undefined) return messageId
+  }
+  return null
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')
+}
+
+/** Son 30 gunde SMTP ile gonderilmis mailler icin IMAP yanitlarini tarar. */
 export async function syncInbox(): Promise<SyncResult> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
   const messages = await db.message.findMany({
-    where: { status: 'SENT', gmailThreadId: { not: null }, sentAt: { gte: since } },
-    select: { id: true, gmailThreadId: true, toEmail: true },
+    where: {
+      status: 'SENT',
+      sentAt: { gte: since },
+      OR: [{ rfcMessageId: { not: null } }, { emailReferences: { some: {} } }],
+    },
+    select: {
+      id: true,
+      rfcMessageId: true,
+      toEmail: true,
+      emailReferences: { select: { rfcMessageId: true } },
+    },
   })
 
   const result: SyncResult = {
@@ -74,31 +106,84 @@ export async function syncInbox(): Promise<SyncResult> {
     errors: [],
   }
 
+  // Eski Gmail kayitlarinda rfcMessageId null oldugundan yeni IMAP akisini etkilemez.
+  if (messages.length === 0) return result
+
+  const referenceToMessage = new Map<string, number>()
   for (const message of messages) {
+    if (message.rfcMessageId) referenceToMessage.set(message.rfcMessageId, message.id)
+    for (const reference of message.emailReferences) {
+      referenceToMessage.set(reference.rfcMessageId, message.id)
+    }
+  }
+
+  let incoming: IncomingMail[]
+  try {
+    incoming = await fetchIncomingMessages(since)
+  } catch (error) {
+    result.errors.push(
+      `Gelen kutusu okunamadi: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    return result
+  }
+
+  const rfcIds = incoming.flatMap((item) => (item.rfcMessageId ? [item.rfcMessageId] : []))
+  const imapKeys = incoming.map((item) => item.imapKey)
+  const [existingByRfc, existingByImap] = await Promise.all([
+    rfcIds.length
+      ? db.reply.findMany({
+          where: { rfcMessageId: { in: rfcIds } },
+          select: { rfcMessageId: true, imapKey: true },
+        })
+      : Promise.resolve([]),
+    imapKeys.length
+      ? db.reply.findMany({
+          where: { imapKey: { in: imapKeys } },
+          select: { rfcMessageId: true, imapKey: true },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const existingRfc = [...existingByRfc, ...existingByImap].flatMap((item) =>
+    item.rfcMessageId ? [item.rfcMessageId] : [],
+  )
+  const existingImap = [...existingByRfc, ...existingByImap].flatMap((item) =>
+    item.imapKey ? [item.imapKey] : [],
+  )
+  const candidates = deduplicateIncomingMessages(incoming, existingRfc, existingImap)
+  const ownAddresses = new Set([
+    env.imap().user.trim().toLowerCase(),
+    env.sender().address.trim().toLowerCase(),
+  ])
+
+  for (const reply of candidates) {
+    const messageId = findReferencedMessageId(reply, referenceToMessage)
+    if (!messageId || !reply.text.trim() || !reply.fromEmail || ownAddresses.has(reply.fromEmail)) {
+      continue
+    }
+
+    let analysis: ReplyAnalysis = { sentiment: 'NEUTRAL', score: 0, summary: '' }
     try {
-      const replies = await getThreadReplies(message.gmailThreadId!)
+      analysis = await analyzeReply(reply.text)
+    } catch (error) {
+      result.errors.push(
+        `Analiz basarisiz (${reply.fromEmail}): ${error instanceof Error ? error.message : error}`,
+      )
+    }
 
-      for (const reply of replies) {
-        // gmailMessageId unique — ayni yanit iki kez islenmez.
-        const exists = await db.reply.findUnique({ where: { gmailMessageId: reply.messageId } })
-        if (exists) continue
-        if (!reply.text.trim()) continue
+    const optOut = isOptOutRequest(reply.text)
 
-        let analysis: ReplyAnalysis = { sentiment: 'NEUTRAL', score: 0, summary: '' }
-        try {
-          analysis = await analyzeReply(reply.text)
-        } catch (error) {
-          result.errors.push(
-            `Analiz basarisiz (${reply.fromEmail}): ${error instanceof Error ? error.message : error}`,
-          )
-        }
-
-        await db.reply.create({
+    try {
+      await db.$transaction(async (tx) => {
+        await tx.reply.create({
           data: {
-            messageId: message.id,
+            messageId,
             fromEmail: reply.fromEmail,
             bodyText: reply.text.slice(0, 8000),
-            gmailMessageId: reply.messageId,
+            rfcMessageId: reply.rfcMessageId,
+            imapKey: reply.imapKey,
+            inReplyTo: reply.inReplyTo,
+            references: reply.references.join(' ') || null,
             receivedAt: reply.receivedAt,
             sentiment: analysis.sentiment,
             sentimentScore: analysis.score,
@@ -106,16 +191,15 @@ export async function syncInbox(): Promise<SyncResult> {
           },
         })
 
-        result.newReplies++
-        if (analysis.sentiment === 'POSITIVE') result.positive++
+        if (reply.rfcMessageId) {
+          await tx.emailThreadReference.create({
+            data: { messageId, rfcMessageId: reply.rfcMessageId, direction: 'INBOUND' },
+          })
+        }
 
-        // Cikis talebi ve olumsuz yanit gelen adrese bir daha gonderme.
-        // Cikis artik mail yanitiyla yapildigi icin anahtar kelime kontrolu
-        // AI'in kararindan bagimsiz calisir — talep kacirilmamali.
-        const optOut = isOptOutRequest(reply.text)
         if (optOut || analysis.sentiment === 'NEGATIVE') {
-          await db.message.update({
-            where: { id: message.id },
+          await tx.message.update({
+            where: { id: messageId },
             data: {
               company: {
                 update: {
@@ -125,14 +209,21 @@ export async function syncInbox(): Promise<SyncResult> {
               },
             },
           })
-          if (optOut) result.optOuts++
         }
-      }
+      })
     } catch (error) {
+      // Paralel iki sync ayni IMAP iletisini gorurse unique alanlar ikinci yazimi eler.
+      if (isUniqueConstraintError(error)) continue
       result.errors.push(
-        `Thread okunamadi (${message.toEmail}): ${error instanceof Error ? error.message : error}`,
+        `Yanit kaydedilemedi (${reply.fromEmail}): ${error instanceof Error ? error.message : error}`,
       )
+      continue
     }
+
+    if (reply.rfcMessageId) referenceToMessage.set(reply.rfcMessageId, messageId)
+    result.newReplies++
+    if (analysis.sentiment === 'POSITIVE') result.positive++
+    if (optOut) result.optOuts++
   }
 
   return result
